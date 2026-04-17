@@ -12,3 +12,4 @@ To recover any trader: `git checkout <commit> -- src/trader.py`
 | v3 | — | `01a2cd9` | pending | — | TrendBiasedMMStrategy + OSM spread=3. Backtest: 194,618 |
 | v4 | 246232.zip | `2b218bd` | FINISHED | 8,935 | IPRDirectionalStrategy (max long, no MM). Backtest: 262,747. OSM: 1,649, IPR: 7,286 |
 | v5 | — | `c89cd7b` | pending | — | OSM wall-mid FV + wall-anchored passive. Backtest: 262,534. Should close OSM gap vs Ian |
+| v6 | — | `540d470` | pending | — | OSM pennying (outbid/undercut best-sized order in queue). Backtest: 290,454. OSM 7.8k->17.5k/day |
