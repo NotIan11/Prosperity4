@@ -65,8 +65,22 @@ class OsmiumStrategy(Strategy):
             if wall_distance > 10:
                 sell_wall_offset = max(1, wall_distance // 5)
 
+        # Wall mid as dynamic reference for taking (2nd place approach)
+        wall_mid = None
+        if bid_wall is not None and ask_wall is not None:
+            wall_mid = (bid_wall + ask_wall) / 2.0
+
         for ask_price in sorted(order_depth.sell_orders.keys()):
-            if ask_price >= FAIR_VALUE:
+            take_ref = (wall_mid - 1) if wall_mid is not None else FAIR_VALUE
+            if ask_price > take_ref:
+                # At wall_mid exactly, only buy to unwind short position
+                if wall_mid is not None and ask_price <= wall_mid and actual_pos + buys_submitted < 0:
+                    remaining = min(-order_depth.sell_orders[ask_price],
+                                    min(abs(actual_pos + buys_submitted),
+                                        self.position_limit - actual_pos - buys_submitted))
+                    if remaining > 0:
+                        orders.append(Order(self.symbol, ask_price, remaining))
+                        buys_submitted += remaining
                 break
             remaining = self.position_limit - actual_pos - buys_submitted
             if remaining <= 0:
@@ -77,7 +91,16 @@ class OsmiumStrategy(Strategy):
                 buys_submitted += qty
 
         for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
-            if bid_price <= FAIR_VALUE:
+            take_ref = (wall_mid + 1) if wall_mid is not None else FAIR_VALUE
+            if bid_price < take_ref:
+                # At wall_mid exactly, only sell to unwind long position
+                if wall_mid is not None and bid_price >= wall_mid and actual_pos - sells_submitted > 0:
+                    remaining = min(order_depth.buy_orders[bid_price],
+                                    min(actual_pos - sells_submitted,
+                                        self.position_limit + actual_pos - sells_submitted))
+                    if remaining > 0:
+                        orders.append(Order(self.symbol, bid_price, -remaining))
+                        sells_submitted += remaining
                 break
             remaining = self.position_limit + actual_pos - sells_submitted
             if remaining <= 0:
@@ -90,12 +113,37 @@ class OsmiumStrategy(Strategy):
         passive_buy_cap = self.position_limit - actual_pos - buys_submitted
         passive_sell_cap = self.position_limit + actual_pos - sells_submitted
 
-        # Post inside the walls with dynamic offset, falling back to fair value if needed
+        # Wall mid as dynamic fair value reference (2nd place approach)
+        wall_mid = None
+        if bid_wall is not None and ask_wall is not None:
+            wall_mid = (bid_wall + ask_wall) / 2.0
+
+        # Post inside the walls with overbidding/penny-ing (outbid best orders in book)
         if passive_buy_cap > 0:
             buy_price = bid_wall + buy_wall_offset if bid_wall is not None else FAIR_VALUE - self.spread
+            # Overbid: find best bid below wall_mid and outbid it
+            if wall_mid is not None:
+                for bp in sorted(order_depth.buy_orders.keys(), reverse=True):
+                    overbid = bp + 1
+                    if order_depth.buy_orders[bp] > 1 and overbid < wall_mid:
+                        buy_price = max(buy_price, overbid)
+                        break
+                    elif bp < wall_mid:
+                        buy_price = max(buy_price, bp)
+                        break
             orders.append(Order(self.symbol, buy_price, passive_buy_cap))
         if passive_sell_cap > 0:
             sell_price = ask_wall - sell_wall_offset if ask_wall is not None else FAIR_VALUE + self.spread
+            # Underbid: find best ask above wall_mid and underbid it
+            if wall_mid is not None:
+                for sp in sorted(order_depth.sell_orders.keys()):
+                    underbid = sp - 1
+                    if abs(order_depth.sell_orders[sp]) > 1 and underbid > wall_mid:
+                        sell_price = min(sell_price, underbid)
+                        break
+                    elif sp > wall_mid:
+                        sell_price = min(sell_price, sp)
+                        break
             orders.append(Order(self.symbol, sell_price, -passive_sell_cap))
 
         return orders
