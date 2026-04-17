@@ -3,10 +3,18 @@ from typing import Dict, List
 
 from datamodel import Order, TradingState
 from strategies.mean_reversion import MeanReversionStrategy
+from strategies.osmium import OsmiumStrategy
 
 PRODUCTS = {
-    "ASH_COATED_OSMIUM": MeanReversionStrategy("ASH_COATED_OSMIUM", position_limit=80),
-    "INTARIAN_PEPPER_ROOT": MeanReversionStrategy("INTARIAN_PEPPER_ROOT", position_limit=80),
+    "ASH_COATED_OSMIUM": OsmiumStrategy("ASH_COATED_OSMIUM", position_limit=80),
+    "INTARIAN_PEPPER_ROOT": MeanReversionStrategy(
+        "INTARIAN_PEPPER_ROOT",
+        position_limit=80,
+        window=2,
+        spread=1,
+        order_size=15,
+        soft_limit_frac=0.5,
+    ),
 }
 
 
