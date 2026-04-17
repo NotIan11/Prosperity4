@@ -87,39 +87,23 @@ class OsmiumStrategy(Strategy):
                 orders.append(Order(self.symbol, bid_price, -qty))
                 sells_submitted += qty
 
-        # Passive quotes: penny the best order with size > 1 inside the walls
-        buy_wall_offset = 1
-        sell_wall_offset = 1
-        if best_bid is not None and bid_wall is not None and best_bid - bid_wall > 10:
-            buy_wall_offset = max(1, (best_bid - bid_wall) // 5)
-        if best_ask is not None and ask_wall is not None and ask_wall - best_ask > 10:
-            sell_wall_offset = max(1, (ask_wall - best_ask) // 5)
-
+        # Passive quotes: post at wall_mid±1 to maximise fill frequency
         passive_buy_cap = self.position_limit - actual_pos - buys_submitted
         passive_sell_cap = self.position_limit + actual_pos - sells_submitted
 
-        if passive_buy_cap > 0 and bid_wall is not None:
-            buy_price = bid_wall + buy_wall_offset
-            # Penny: outbid the best-sized bid below wall_mid to jump the queue
-            for bp in sorted(order_depth.buy_orders.keys(), reverse=True):
-                if order_depth.buy_orders[bp] > 1 and bp + 1 < wall_mid:
-                    buy_price = max(buy_price, bp + 1)
-                    break
-                elif bp < wall_mid:
-                    buy_price = max(buy_price, bp)
-                    break
-            orders.append(Order(self.symbol, buy_price, passive_buy_cap))
+        buy_price = int(wall_mid) - 1
+        sell_price = int(wall_mid) + 1
+        # Ensure we stay inside the walls and maintain a positive spread
+        if bid_wall is not None:
+            buy_price = max(buy_price, int(bid_wall) + 1)
+        if ask_wall is not None:
+            sell_price = min(sell_price, int(ask_wall) - 1)
+        if sell_price <= buy_price:
+            sell_price = buy_price + 1
 
-        if passive_sell_cap > 0 and ask_wall is not None:
-            sell_price = ask_wall - sell_wall_offset
-            # Penny: undercut the best-sized ask above wall_mid to jump the queue
-            for sp in sorted(order_depth.sell_orders.keys()):
-                if abs(order_depth.sell_orders[sp]) > 1 and sp - 1 > wall_mid:
-                    sell_price = min(sell_price, sp - 1)
-                    break
-                elif sp > wall_mid:
-                    sell_price = min(sell_price, sp)
-                    break
+        if passive_buy_cap > 0:
+            orders.append(Order(self.symbol, buy_price, passive_buy_cap))
+        if passive_sell_cap > 0:
             orders.append(Order(self.symbol, sell_price, -passive_sell_cap))
 
         return orders
