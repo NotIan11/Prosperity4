@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from src.datamodel import Order, OrderDepth, TradingState
 from src.strategies.base import Strategy
@@ -21,7 +21,7 @@ class OsmiumStrategy(Strategy):
     """
 
     def run(self, state: TradingState) -> List[Order]:
-        order_depth: OrderDepth = state.order_depths.get(self.symbol)
+        order_depth: Optional[OrderDepth] = state.order_depths.get(self.symbol)
         if order_depth is None:
             return []
 
@@ -29,6 +29,10 @@ class OsmiumStrategy(Strategy):
         orders: List[Order] = []
         buys_submitted = 0
         sells_submitted = 0
+
+        # --- Calculate walls (deepest liquidity) ---
+        bid_wall = min(order_depth.buy_orders.keys()) if order_depth.buy_orders else None
+        ask_wall = max(order_depth.sell_orders.keys()) if order_depth.sell_orders else None
 
         # --- Take mispriced sell orders (ask < FV → buy cheap) ---
         for ask_price in sorted(order_depth.sell_orders.keys()):
@@ -54,13 +58,16 @@ class OsmiumStrategy(Strategy):
                 orders.append(Order(self.symbol, bid_price, -qty))
                 sells_submitted += qty
 
-        # --- Passive orders with remaining gross capacity ---
+        # --- Passive orders with remaining gross capacity, posted at walls ---
         passive_buy_cap = self.position_limit - actual_pos - buys_submitted
         passive_sell_cap = self.position_limit + actual_pos - sells_submitted
 
+        # Post inside the walls where real liquidity sits
         if passive_buy_cap > 0:
-            orders.append(Order(self.symbol, FAIR_VALUE - 1, passive_buy_cap))
+            buy_price = bid_wall + 1 if bid_wall is not None else FAIR_VALUE - 1
+            orders.append(Order(self.symbol, buy_price, passive_buy_cap))
         if passive_sell_cap > 0:
-            orders.append(Order(self.symbol, FAIR_VALUE + 1, -passive_sell_cap))
+            sell_price = ask_wall - 1 if ask_wall is not None else FAIR_VALUE + 1
+            orders.append(Order(self.symbol, sell_price, -passive_sell_cap))
 
         return orders

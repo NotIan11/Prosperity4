@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 
 from src.datamodel import Order, OrderDepth, TradingState
 from src.strategies.base import Strategy
@@ -43,7 +43,7 @@ class MeanReversionStrategy(Strategy):
         return self._ewm
 
     def run(self, state: TradingState) -> List[Order]:
-        order_depth: OrderDepth = state.order_depths.get(self.symbol)
+        order_depth: Optional[OrderDepth] = state.order_depths.get(self.symbol)
         if order_depth is None:
             return []
 
@@ -51,6 +51,10 @@ class MeanReversionStrategy(Strategy):
         best_ask = min(order_depth.sell_orders.keys(), default=None)
         if best_bid is None or best_ask is None:
             return []
+
+        # --- Calculate walls (deepest liquidity) ---
+        bid_wall = min(order_depth.buy_orders.keys()) if order_depth.buy_orders else best_bid
+        ask_wall = max(order_depth.sell_orders.keys()) if order_depth.sell_orders else best_ask
 
         mid = (best_bid + best_ask) / 2.0
         fair_value = self._update_ewm(mid)
@@ -85,11 +89,12 @@ class MeanReversionStrategy(Strategy):
                 sells_submitted += qty
 
         # --- Passive quotes with inventory skew and remaining gross capacity ---
+        # Post inside the walls where real liquidity sits, with skew for inventory management
         skew = round(self.spread * actual_pos / max(self.soft_limit, 1))
         skew = max(-self.spread, min(self.spread, skew))
 
-        bid_price = round(fair_value) - self.spread + skew
-        ask_price = round(fair_value) + self.spread + skew
+        bid_price = bid_wall + 1 + skew
+        ask_price = ask_wall - 1 + skew
 
         passive_buy_cap = self.position_limit - actual_pos - buys_submitted
         passive_sell_cap = self.position_limit + actual_pos - sells_submitted

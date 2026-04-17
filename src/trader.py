@@ -1,8 +1,13 @@
 import json
 from abc import ABC, abstractmethod
-from typing import Dict, List
+from typing import Dict, List, Optional, Tuple
 
-from src.datamodel import Order, OrderDepth, TradingState
+try:
+    # For IMC production environment
+    from datamodel import Order, OrderDepth, TradingState  # type: ignore
+except ImportError:
+    # For local development
+    from src.datamodel import Order, OrderDepth, TradingState  # type: ignore
 
 
 class Strategy(ABC):
@@ -33,7 +38,7 @@ class OsmiumStrategy(Strategy):
         self.spread = spread
 
     def run(self, state: TradingState) -> List[Order]:
-        order_depth: OrderDepth = state.order_depths.get(self.symbol)
+        order_depth: Optional[OrderDepth] = state.order_depths.get(self.symbol)
         if order_depth is None:
             return []
 
@@ -41,6 +46,24 @@ class OsmiumStrategy(Strategy):
         orders: List[Order] = []
         buys_submitted = 0
         sells_submitted = 0
+
+        # --- Calculate best bid/ask and walls ---
+        best_bid = max(order_depth.buy_orders.keys(), default=None)
+        best_ask = min(order_depth.sell_orders.keys(), default=None)
+        bid_wall = min(order_depth.buy_orders.keys()) if order_depth.buy_orders else best_bid
+        ask_wall = max(order_depth.sell_orders.keys()) if order_depth.sell_orders else best_ask
+
+        # --- Dynamic wall offset: if walls are too deep, adjust back toward best bid/ask ---
+        buy_wall_offset = 1
+        sell_wall_offset = 1
+        if best_bid is not None and bid_wall is not None:
+            wall_distance = best_bid - bid_wall
+            if wall_distance > 10:  # Wall is too deep
+                buy_wall_offset = max(1, wall_distance // 5)
+        if best_ask is not None and ask_wall is not None:
+            wall_distance = ask_wall - best_ask
+            if wall_distance > 10:
+                sell_wall_offset = max(1, wall_distance // 5)
 
         for ask_price in sorted(order_depth.sell_orders.keys()):
             if ask_price >= FAIR_VALUE:
@@ -67,10 +90,13 @@ class OsmiumStrategy(Strategy):
         passive_buy_cap = self.position_limit - actual_pos - buys_submitted
         passive_sell_cap = self.position_limit + actual_pos - sells_submitted
 
+        # Post inside the walls with dynamic offset, falling back to fair value if needed
         if passive_buy_cap > 0:
-            orders.append(Order(self.symbol, FAIR_VALUE - self.spread, passive_buy_cap))
+            buy_price = bid_wall + buy_wall_offset if bid_wall is not None else FAIR_VALUE - self.spread
+            orders.append(Order(self.symbol, buy_price, passive_buy_cap))
         if passive_sell_cap > 0:
-            orders.append(Order(self.symbol, FAIR_VALUE + self.spread, -passive_sell_cap))
+            sell_price = ask_wall - sell_wall_offset if ask_wall is not None else FAIR_VALUE + self.spread
+            orders.append(Order(self.symbol, sell_price, -passive_sell_cap))
 
         return orders
 
@@ -113,7 +139,7 @@ class TrendBiasedMMStrategy(Strategy):
         return slope * 5.0 + flow_sum * 0.01
 
     def run(self, state: TradingState) -> List[Order]:
-        order_depth: OrderDepth = state.order_depths.get(self.symbol)
+        order_depth: Optional[OrderDepth] = state.order_depths.get(self.symbol)
         if order_depth is None:
             return []
 
@@ -157,9 +183,24 @@ class TrendBiasedMMStrategy(Strategy):
                     orders.append(Order(self.symbol, ask_price, qty))
                     buys_submitted += qty
 
-        # Passive quotes one tick inside the real spread
-        quote_bid = best_bid + 1
-        quote_ask = best_ask - 1
+        # Passive quotes anchored to walls (deepest liquidity) instead of best bid/ask
+        bid_wall = min(order_depth.buy_orders.keys()) if order_depth.buy_orders else best_bid
+        ask_wall = max(order_depth.sell_orders.keys()) if order_depth.sell_orders else best_ask
+        
+        # Dynamic wall offset: if walls are too deep, adjust back toward best bid/ask
+        buy_wall_offset = 1
+        sell_wall_offset = 1
+        if best_bid is not None and bid_wall is not None:
+            wall_distance = best_bid - bid_wall
+            if wall_distance > 10:  # Wall is too deep
+                buy_wall_offset = max(1, wall_distance // 5)
+        if best_ask is not None and ask_wall is not None:
+            wall_distance = ask_wall - best_ask
+            if wall_distance > 10:
+                sell_wall_offset = max(1, wall_distance // 5)
+        
+        quote_bid = bid_wall + buy_wall_offset
+        quote_ask = ask_wall - sell_wall_offset
         if quote_ask <= quote_bid:
             quote_bid = best_bid
             quote_ask = best_ask
@@ -170,6 +211,13 @@ class TrendBiasedMMStrategy(Strategy):
         # Scale bid size up when trending up, ask size up when trending down
         bid_size = int(self.order_size * (1.0 + max(0.0, min(1.0, trend * 0.5))))
         ask_size = int(self.order_size * (1.0 + max(0.0, min(1.0, -trend * 0.5))))
+
+        # Be more aggressive (post larger sizes) at cold start when we're still learning
+        if len(self._mids) < 10:
+            bid_size = int(passive_buy_cap * 0.5) if passive_buy_cap > 0 else 0
+            ask_size = int(passive_sell_cap * 0.5) if passive_sell_cap > 0 else 0
+            quote_bid = best_bid + 1  # Post closer to market at cold start
+            quote_ask = best_ask - 1
 
         if passive_buy_cap > 0 and actual_pos < long_cap:
             orders.append(Order(self.symbol, quote_bid, min(bid_size, passive_buy_cap)))
@@ -190,7 +238,7 @@ PRODUCTS = {
 
 
 class Trader:
-    def run(self, state: TradingState) -> tuple[Dict[str, List[Order]], int, str]:
+    def run(self, state: TradingState) -> Tuple[Dict[str, List[Order]], int, str]:
         saved = {}
         if state.traderData:
             try:
