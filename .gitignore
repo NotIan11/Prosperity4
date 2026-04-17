@@ -9,3 +9,4 @@ backtests/*.json
 dist/
 build/
 .ipynb_checkpoints/
+*.zip
