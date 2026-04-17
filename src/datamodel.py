@@ -1,8 +1,6 @@
 import json
 from json import JSONEncoder
-from typing import Dict, List
-
-import jsonpickle
+from typing import Dict, List, Optional
 
 Time = int
 Symbol = str
@@ -51,9 +49,9 @@ class Observation:
     def __str__(self) -> str:
         return (
             "(plainValueObservations: "
-            + jsonpickle.encode(self.plainValueObservations)
+            + json.dumps(self.plainValueObservations, default=lambda o: o.__dict__)
             + ", conversionObservations: "
-            + jsonpickle.encode(self.conversionObservations)
+            + json.dumps(self.conversionObservations, default=lambda o: o.__dict__)
             + ")"
         )
 
@@ -83,8 +81,8 @@ class Trade:
         symbol: Symbol,
         price: int,
         quantity: int,
-        buyer: UserId = None,
-        seller: UserId = None,
+        buyer: Optional[UserId] = None,
+        seller: Optional[UserId] = None,
         timestamp: int = 0,
     ) -> None:
         self.symbol = symbol
@@ -99,9 +97,9 @@ class Trade:
             "("
             + self.symbol
             + ", "
-            + self.buyer
+            + (self.buyer or "")
             + " << "
-            + self.seller
+            + (self.seller or "")
             + ", "
             + str(self.price)
             + ", "
@@ -116,9 +114,9 @@ class Trade:
             "("
             + self.symbol
             + ", "
-            + self.buyer
+            + (self.buyer or "")
             + " << "
-            + self.seller
+            + (self.seller or "")
             + ", "
             + str(self.price)
             + ", "

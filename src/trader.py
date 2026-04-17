@@ -29,6 +29,88 @@ class Strategy(ABC):
         pass
 
 
+# Signal: 1 = bullish (buy at daily low), -1 = bearish (sell at daily high), 0 = neutral
+LONG, NEUTRAL, SHORT = 1, 0, -1
+
+
+class ExtremeSignalTracker:
+    """
+    Detects informed-trader-like behavior by watching for trades at daily
+    price extremes. Inspired by Frankfurt Hedgehogs' Prosperity 3 strategy.
+
+    Tracks running daily min/max of mid prices. When a market trade occurs
+    at or near a new extreme in the expected direction (buy at low, sell at
+    high), flags a directional signal. False positives are managed by
+    invalidating signals when new contradicting extremes form.
+    """
+
+    def __init__(self, threshold_ticks: int = 2) -> None:
+        self.threshold = threshold_ticks  # how close to extreme counts as "at extreme"
+        self.daily_low: Optional[float] = None
+        self.daily_high: Optional[float] = None
+        self.signal: int = NEUTRAL
+        self.signal_ts: int = 0  # timestamp of last signal
+
+    def save_state(self) -> dict:
+        return {
+            "daily_low": self.daily_low,
+            "daily_high": self.daily_high,
+            "signal": self.signal,
+            "signal_ts": self.signal_ts,
+        }
+
+    def load_state(self, data: dict) -> None:
+        self.daily_low = data.get("daily_low")
+        self.daily_high = data.get("daily_high")
+        self.signal = data.get("signal", NEUTRAL)
+        self.signal_ts = data.get("signal_ts", 0)
+
+    def update(self, state: TradingState, symbol: str) -> int:
+        """Update tracker with latest state. Returns current signal."""
+        order_depth = state.order_depths.get(symbol)
+        if not order_depth or not order_depth.buy_orders or not order_depth.sell_orders:
+            return self.signal
+
+        best_bid = max(order_depth.buy_orders.keys())
+        best_ask = min(order_depth.sell_orders.keys())
+        mid = (best_bid + best_ask) / 2.0
+
+        # Update running daily extremes
+        if self.daily_low is None or mid < self.daily_low:
+            self.daily_low = mid
+            # New low invalidates a previous bullish signal
+            if self.signal == LONG:
+                self.signal = NEUTRAL
+        if self.daily_high is None or mid > self.daily_high:
+            self.daily_high = mid
+            # New high invalidates a previous bearish signal
+            if self.signal == SHORT:
+                self.signal = NEUTRAL
+
+        # Scan market trades for informed-like behavior
+        for trade in state.market_trades.get(symbol, []):
+            # Skip our own trades
+            if trade.buyer == "SUBMISSION" or trade.seller == "SUBMISSION":
+                continue
+
+            # Infer trade direction: price >= mid → buy-initiated, < mid → sell-initiated
+            is_buy = trade.price >= mid
+
+            # Buy near daily low → bullish signal
+            if is_buy and self.daily_low is not None:
+                if trade.price <= self.daily_low + self.threshold:
+                    self.signal = LONG
+                    self.signal_ts = state.timestamp
+
+            # Sell near daily high → bearish signal
+            if not is_buy and self.daily_high is not None:
+                if trade.price >= self.daily_high - self.threshold:
+                    self.signal = SHORT
+                    self.signal_ts = state.timestamp
+
+        return self.signal
+
+
 FAIR_VALUE = 10_000
 
 
@@ -165,13 +247,20 @@ class TrendBiasedMMStrategy(Strategy):
         self.order_size = order_size
         self._mids: list = []
         self._flows: list = []
+        self._signal_tracker = ExtremeSignalTracker(threshold_ticks=2)
 
     def save_state(self) -> dict:
-        return {"mids": self._mids, "flows": self._flows}
+        return {
+            "mids": self._mids,
+            "flows": self._flows,
+            "signal": self._signal_tracker.save_state(),
+        }
 
     def load_state(self, data: dict) -> None:
         self._mids = data.get("mids", [])
         self._flows = data.get("flows", [])
+        if "signal" in data:
+            self._signal_tracker.load_state(data["signal"])
 
     def _trend_score(self) -> float:
         n = min(25, len(self._mids))
@@ -209,14 +298,22 @@ class TrendBiasedMMStrategy(Strategy):
         self._flows = self._flows[-60:]
 
         trend = self._trend_score()
+        informed_signal = self._signal_tracker.update(state, self.symbol)
         actual_pos = self.get_position(state)
         orders: List[Order] = []
         buys_submitted = 0
         sells_submitted = 0
 
-        # Inventory caps: allow larger long when trending up
-        long_cap = int(min(self.position_limit, max(40, 40 + trend * 15)))
-        short_cap = int(min(self.position_limit, max(10, 20 - trend * 10)))
+        # Informed signal adjustment: shift caps when signal detected
+        signal_adj = 0
+        if informed_signal == LONG:
+            signal_adj = 20  # Bias toward long
+        elif informed_signal == SHORT:
+            signal_adj = -20  # Bias toward short
+
+        # Inventory caps: allow larger long when trending up or signal is bullish
+        long_cap = int(min(self.position_limit, max(40, 40 + trend * 15 + signal_adj)))
+        short_cap = int(min(self.position_limit, max(10, 20 - trend * 10 - signal_adj)))
 
         # Aggressive lift: take the best ask when trend is strong
         if trend > 1.0:
