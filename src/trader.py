@@ -28,10 +28,6 @@ FAIR_VALUE = 10_000
 
 
 class OsmiumStrategy(Strategy):
-    def __init__(self, symbol: str, position_limit: int, spread: int = 1) -> None:
-        super().__init__(symbol, position_limit)
-        self.spread = spread
-
     def run(self, state: TradingState) -> List[Order]:
         order_depth: OrderDepth = state.order_depths.get(self.symbol)
         if order_depth is None:
@@ -42,8 +38,27 @@ class OsmiumStrategy(Strategy):
         buys_submitted = 0
         sells_submitted = 0
 
+        best_bid = max(order_depth.buy_orders.keys(), default=None)
+        best_ask = min(order_depth.sell_orders.keys(), default=None)
+        bid_wall = min(order_depth.buy_orders.keys()) if order_depth.buy_orders else None
+        ask_wall = max(order_depth.sell_orders.keys()) if order_depth.sell_orders else None
+
+        # Wall mid tracks where the market maker's book is centered
+        wall_mid = (bid_wall + ask_wall) / 2.0 if bid_wall is not None and ask_wall is not None else float(FAIR_VALUE)
+
+        buy_ref = wall_mid - 1
+        sell_ref = wall_mid + 1
+
         for ask_price in sorted(order_depth.sell_orders.keys()):
-            if ask_price >= FAIR_VALUE:
+            if ask_price > buy_ref:
+                # At wall_mid, only buy to unwind a short
+                if ask_price <= wall_mid and actual_pos + buys_submitted < 0:
+                    qty = min(-order_depth.sell_orders[ask_price],
+                              min(abs(actual_pos + buys_submitted),
+                                  self.position_limit - actual_pos - buys_submitted))
+                    if qty > 0:
+                        orders.append(Order(self.symbol, ask_price, qty))
+                        buys_submitted += qty
                 break
             remaining = self.position_limit - actual_pos - buys_submitted
             if remaining <= 0:
@@ -54,7 +69,15 @@ class OsmiumStrategy(Strategy):
                 buys_submitted += qty
 
         for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
-            if bid_price <= FAIR_VALUE:
+            if bid_price < sell_ref:
+                # At wall_mid, only sell to unwind a long
+                if bid_price >= wall_mid and actual_pos - sells_submitted > 0:
+                    qty = min(order_depth.buy_orders[bid_price],
+                              min(actual_pos - sells_submitted,
+                                  self.position_limit + actual_pos - sells_submitted))
+                    if qty > 0:
+                        orders.append(Order(self.symbol, bid_price, -qty))
+                        sells_submitted += qty
                 break
             remaining = self.position_limit + actual_pos - sells_submitted
             if remaining <= 0:
@@ -64,13 +87,23 @@ class OsmiumStrategy(Strategy):
                 orders.append(Order(self.symbol, bid_price, -qty))
                 sells_submitted += qty
 
+        # Passive quotes inside the walls
+        buy_wall_offset = 1
+        sell_wall_offset = 1
+        if best_bid is not None and bid_wall is not None:
+            if best_bid - bid_wall > 10:
+                buy_wall_offset = max(1, (best_bid - bid_wall) // 5)
+        if best_ask is not None and ask_wall is not None:
+            if ask_wall - best_ask > 10:
+                sell_wall_offset = max(1, (ask_wall - best_ask) // 5)
+
         passive_buy_cap = self.position_limit - actual_pos - buys_submitted
         passive_sell_cap = self.position_limit + actual_pos - sells_submitted
 
-        if passive_buy_cap > 0:
-            orders.append(Order(self.symbol, FAIR_VALUE - self.spread, passive_buy_cap))
-        if passive_sell_cap > 0:
-            orders.append(Order(self.symbol, FAIR_VALUE + self.spread, -passive_sell_cap))
+        if passive_buy_cap > 0 and bid_wall is not None:
+            orders.append(Order(self.symbol, bid_wall + buy_wall_offset, passive_buy_cap))
+        if passive_sell_cap > 0 and ask_wall is not None:
+            orders.append(Order(self.symbol, ask_wall - sell_wall_offset, -passive_sell_cap))
 
         return orders
 
@@ -105,7 +138,7 @@ class IPRDirectionalStrategy(Strategy):
 
 
 PRODUCTS = {
-    "ASH_COATED_OSMIUM": OsmiumStrategy("ASH_COATED_OSMIUM", position_limit=80, spread=3),
+    "ASH_COATED_OSMIUM": OsmiumStrategy("ASH_COATED_OSMIUM", position_limit=80),
     "INTARIAN_PEPPER_ROOT": IPRDirectionalStrategy("INTARIAN_PEPPER_ROOT", position_limit=80),
 }
 
