@@ -87,24 +87,43 @@ class OsmiumStrategy(Strategy):
                 orders.append(Order(self.symbol, bid_price, -qty))
                 sells_submitted += qty
 
-        # Passive quotes: post at wall_mid±1 to maximise fill frequency
+        # Ladder passive quotes: split across two levels to capture different takers
+        # Tight level (±2): catches aggressive takers who cross close to wall_mid
+        # Deep level (±5): catches takers who only cross further from mid (like our old pennying)
         passive_buy_cap = self.position_limit - actual_pos - buys_submitted
         passive_sell_cap = self.position_limit + actual_pos - sells_submitted
 
-        buy_price = int(wall_mid) - 1
-        sell_price = int(wall_mid) + 1
-        # Ensure we stay inside the walls and maintain a positive spread
+        wm = int(wall_mid)
+        tight_buy = wm - 2
+        deep_buy  = wm - 5
+        tight_ask = wm + 2
+        deep_ask  = wm + 5
+
+        # Clamp inside walls
         if bid_wall is not None:
-            buy_price = max(buy_price, int(bid_wall) + 1)
+            tight_buy = max(tight_buy, int(bid_wall) + 1)
+            deep_buy  = max(deep_buy,  int(bid_wall) + 1)
         if ask_wall is not None:
-            sell_price = min(sell_price, int(ask_wall) - 1)
-        if sell_price <= buy_price:
-            sell_price = buy_price + 1
+            tight_ask = min(tight_ask, int(ask_wall) - 1)
+            deep_ask  = min(deep_ask,  int(ask_wall) - 1)
 
         if passive_buy_cap > 0:
-            orders.append(Order(self.symbol, buy_price, passive_buy_cap))
+            half = passive_buy_cap // 2
+            rest = passive_buy_cap - half
+            if tight_buy != deep_buy:
+                orders.append(Order(self.symbol, tight_buy, half))
+                orders.append(Order(self.symbol, deep_buy,  rest))
+            else:
+                orders.append(Order(self.symbol, tight_buy, passive_buy_cap))
+
         if passive_sell_cap > 0:
-            orders.append(Order(self.symbol, sell_price, -passive_sell_cap))
+            half = passive_sell_cap // 2
+            rest = passive_sell_cap - half
+            if tight_ask != deep_ask:
+                orders.append(Order(self.symbol, tight_ask, -half))
+                orders.append(Order(self.symbol, deep_ask,  -rest))
+            else:
+                orders.append(Order(self.symbol, tight_ask, -passive_sell_cap))
 
         return orders
 
@@ -162,6 +181,19 @@ class Trader:
             if symbol in state.order_depths:
                 orders[symbol] = strategy.run(state)
 
-        trader_data = json.dumps({s: strat.save_state() for s, strat in PRODUCTS.items()})
+        state_out = {s: strat.save_state() for s, strat in PRODUCTS.items()}
+
+        # Log observations on first tick so we can inspect them in the portal
+        if state.timestamp == 0:
+            try:
+                obs = {
+                    "plain": dict(state.observations.plainValueObservations),
+                    "conversion": {k: vars(v) for k, v in state.observations.conversionObservations.items()},
+                }
+                state_out["_obs"] = obs
+            except Exception:
+                pass
+
+        trader_data = json.dumps(state_out)
 
         return orders, 0, trader_data
