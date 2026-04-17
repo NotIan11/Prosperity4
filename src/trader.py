@@ -75,117 +75,38 @@ class OsmiumStrategy(Strategy):
         return orders
 
 
-class TrendBiasedMMStrategy(Strategy):
+class IPRDirectionalStrategy(Strategy):
     """
-    Market-making for INTARIAN_PEPPER_ROOT anchored to best_bid+1 / best_ask-1
-    (inside the real ~13-tick spread) with a trend-biased inventory target.
-
-    Trend is computed from a 25-step linear slope of mid prices + rolling
-    signed market-trade flow. When trending up, inventory target shifts long
-    (up to +70) so we systematically build exposure in the direction of drift.
-    EWM state and trend history persist across Lambda invocations via traderData.
+    IPR price is deterministic: FV(ts) = day_start + ts * 0.001 (RMSE ≈ 2 ticks).
+    Carry is +1000 ticks/day on 80 units; ask premium is only ~6-8 ticks.
+    Optimal: stay max long the entire session by aggressively taking all asks.
+    Never sell — any sell forgoes carry worth hundreds of ticks per unit.
     """
-
-    def __init__(self, symbol: str, position_limit: int, order_size: int = 15) -> None:
-        super().__init__(symbol, position_limit)
-        self.order_size = order_size
-        self._mids: list = []
-        self._flows: list = []
-
-    def save_state(self) -> dict:
-        return {"mids": self._mids, "flows": self._flows}
-
-    def load_state(self, data: dict) -> None:
-        self._mids = data.get("mids", [])
-        self._flows = data.get("flows", [])
-
-    def _trend_score(self) -> float:
-        n = min(25, len(self._mids))
-        if n < 5:
-            return 0.0
-        ys = self._mids[-n:]
-        mx = (n - 1) / 2.0
-        my = sum(ys) / n
-        num = sum((i - mx) * (ys[i] - my) for i in range(n))
-        den = sum((i - mx) ** 2 for i in range(n)) or 1.0
-        slope = num / den  # ticks per step
-        flow_sum = sum(self._flows[-20:])
-        return slope * 5.0 + flow_sum * 0.01
 
     def run(self, state: TradingState) -> List[Order]:
         order_depth: OrderDepth = state.order_depths.get(self.symbol)
         if order_depth is None:
             return []
 
-        best_bid = max(order_depth.buy_orders.keys(), default=None)
-        best_ask = min(order_depth.sell_orders.keys(), default=None)
-        if best_bid is None or best_ask is None:
-            return []
-
-        mid = (best_bid + best_ask) / 2.0
-
-        # Signed market trade flow: positive = buy-initiated (bullish)
-        signed = 0
-        for t in state.market_trades.get(self.symbol, []):
-            signed += t.quantity if t.price >= mid else -t.quantity
-
-        self._mids.append(mid)
-        self._mids = self._mids[-60:]
-        self._flows.append(signed)
-        self._flows = self._flows[-60:]
-
-        trend = self._trend_score()
-        actual_pos = self.get_position(state)
+        pos = self.get_position(state)
         orders: List[Order] = []
-        buys_submitted = 0
-        sells_submitted = 0
+        buys = 0
 
-        # Inventory caps: allow larger long when trending up
-        long_cap = int(min(self.position_limit, max(40, 40 + trend * 15)))
-        short_cap = int(min(self.position_limit, max(10, 20 - trend * 10)))
-
-        # Aggressive lift: take the best ask when trend is strong
-        if trend > 1.0:
-            for ask_price in sorted(order_depth.sell_orders.keys()):
-                if ask_price > best_ask:
-                    break
-                remaining = self.position_limit - actual_pos - buys_submitted
-                if remaining <= 0:
-                    break
-                qty = min(-order_depth.sell_orders[ask_price], remaining)
-                if qty > 0:
-                    orders.append(Order(self.symbol, ask_price, qty))
-                    buys_submitted += qty
-
-        # Passive quotes one tick inside the real spread
-        quote_bid = best_bid + 1
-        quote_ask = best_ask - 1
-        if quote_ask <= quote_bid:
-            quote_bid = best_bid
-            quote_ask = best_ask
-
-        passive_buy_cap = self.position_limit - actual_pos - buys_submitted
-        passive_sell_cap = self.position_limit + actual_pos - sells_submitted
-
-        # Scale bid size up when trending up, ask size up when trending down
-        bid_size = int(self.order_size * (1.0 + max(0.0, min(1.0, trend * 0.5))))
-        ask_size = int(self.order_size * (1.0 + max(0.0, min(1.0, -trend * 0.5))))
-
-        if passive_buy_cap > 0 and actual_pos < long_cap:
-            orders.append(Order(self.symbol, quote_bid, min(bid_size, passive_buy_cap)))
-        if passive_sell_cap > 0 and actual_pos > -short_cap:
-            orders.append(Order(self.symbol, quote_ask, -min(ask_size, passive_sell_cap)))
+        for ask_price in sorted(order_depth.sell_orders.keys()):
+            remaining = self.position_limit - pos - buys
+            if remaining <= 0:
+                break
+            qty = min(-order_depth.sell_orders[ask_price], remaining)
+            if qty > 0:
+                orders.append(Order(self.symbol, ask_price, qty))
+                buys += qty
 
         return orders
 
 
 PRODUCTS = {
     "ASH_COATED_OSMIUM": OsmiumStrategy("ASH_COATED_OSMIUM", position_limit=80, spread=3),
-    "INTARIAN_PEPPER_ROOT": TrendBiasedMMStrategy(
-        "INTARIAN_PEPPER_ROOT",
-        position_limit=80,
-        order_size=15,
-    ),
+    "INTARIAN_PEPPER_ROOT": IPRDirectionalStrategy("INTARIAN_PEPPER_ROOT", position_limit=80),
 }
 
 
