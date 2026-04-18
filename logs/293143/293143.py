@@ -130,6 +130,8 @@ class PepperStrategy(Strategy):
 
     Price trends continuously +~1000 ticks within each day. Maximising long exposure
     as early as possible and holding captures nearly the full intraday range.
+    EWM market-making is counter-productive here: passive asks get swept in the uptrend
+    and accumulate a costly short position.
     """
 
     def __init__(self, symbol: str, position_limit: int) -> None:
@@ -155,62 +157,6 @@ class PepperStrategy(Strategy):
         return orders
 
 
-class PepperCyclingStrategy(Strategy):
-    """Experimental cycling for INTARIAN_PEPPER_ROOT.
-
-    Identical to PepperStrategy (aggressive buy to limit) PLUS a passive sell of
-    CYCLE_SIZE units at ask_wall-1 on every tick where 2+ ask levels exist.
-
-    When an aggressive bot buyer sweeps through best_ask and reaches ask_wall-1,
-    our resting sell fills at a premium above best_ask. The next tick's aggressive
-    buy loop reinstates the full position, capturing the spread differential as profit.
-
-    ask_wall-1 > best_ask by construction (wall is the deepest ask level), so each
-    successful fill earns more than the current market ask price.
-
-    To revert: in PRODUCTS below, change PepperCyclingStrategy back to PepperStrategy.
-    """
-
-    CYCLE_SIZE: int = 20
-
-    def __init__(self, symbol: str, position_limit: int) -> None:
-        super().__init__(symbol, position_limit)
-
-    def run(self, state: TradingState) -> List[Order]:
-        order_depth: Optional[OrderDepth] = state.order_depths.get(self.symbol)
-        if order_depth is None or not order_depth.sell_orders:
-            return []
-
-        pos = self.get_position(state)
-        orders: List[Order] = []
-        buys = 0
-        sells = 0
-
-        # 1. Aggressive buy to position limit (same as PepperStrategy)
-        for ask_price in sorted(order_depth.sell_orders.keys()):
-            remaining = self.position_limit - pos - buys
-            if remaining <= 0:
-                break
-            qty = min(-order_depth.sell_orders[ask_price], remaining)
-            if qty > 0:
-                orders.append(Order(self.symbol, ask_price, qty))
-                buys += qty
-
-        # 2. Passive cycling sell at ask_wall-1 (only when a deeper ask level exists)
-        if len(order_depth.sell_orders) >= 2:
-            ask_wall = max(order_depth.sell_orders.keys())
-            best_bid = max(order_depth.buy_orders.keys()) if order_depth.buy_orders else 0
-            sell_price = ask_wall - 1
-            if sell_price > best_bid:  # ensure truly passive (no immediate cross)
-                effective_pos = pos + buys - sells
-                floor = self.position_limit - self.CYCLE_SIZE  # 60
-                qty = min(self.CYCLE_SIZE, max(0, effective_pos - floor))
-                if qty > 0:
-                    orders.append(Order(self.symbol, sell_price, -qty))
-
-        return orders
-
-
 PRODUCTS = {
     "ASH_COATED_OSMIUM": OsmiumStrategy("ASH_COATED_OSMIUM", position_limit=80),
     "INTARIAN_PEPPER_ROOT": PepperStrategy("INTARIAN_PEPPER_ROOT", position_limit=80),
@@ -218,22 +164,6 @@ PRODUCTS = {
 
 
 class Trader:
-    def bid(self) -> int:
-        # GTO Market Access Fee bid.
-        #
-        # Final simulation is 1 day, so V = incremental value for one day of extra access.
-        # Extra access = 25% more quotes (testing uses 80%; full access = 100%).
-        # Incremental value per day:
-        #   - Osmium:  ~19,773/day × 0.25 ≈ 4,943  (fills scale linearly with flow)
-        #   - Pepper:  ~79,262/day × 0.05 ≈ 3,963  (conservative; mostly position-limited)
-        #   - Total V  ≈ 8,906 per day
-        #
-        # Mechanism: top 50% of bids win + pay their bid. Only need to beat the median.
-        # Nash equilibrium (uniform bids on [0,V]): bid V/2 ≈ 4,453.
-        # Bidding slightly above GTO (~V*0.56) to protect against a low-skewed distribution.
-        # Bidding above V is dominated (pay more than you gain).
-        return 5000
-
     def run(self, state: TradingState) -> Tuple[Dict[str, List[Order]], int, str]:
         saved = {}
         if state.traderData:

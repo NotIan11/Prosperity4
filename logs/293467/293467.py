@@ -130,6 +130,8 @@ class PepperStrategy(Strategy):
 
     Price trends continuously +~1000 ticks within each day. Maximising long exposure
     as early as possible and holding captures nearly the full intraday range.
+    EWM market-making is counter-productive here: passive asks get swept in the uptrend
+    and accumulate a costly short position.
     """
 
     def __init__(self, symbol: str, position_limit: int) -> None:
@@ -213,27 +215,12 @@ class PepperCyclingStrategy(Strategy):
 
 PRODUCTS = {
     "ASH_COATED_OSMIUM": OsmiumStrategy("ASH_COATED_OSMIUM", position_limit=80),
-    "INTARIAN_PEPPER_ROOT": PepperStrategy("INTARIAN_PEPPER_ROOT", position_limit=80),
+    # To revert pepper cycling: swap PepperCyclingStrategy → PepperStrategy below
+    "INTARIAN_PEPPER_ROOT": PepperCyclingStrategy("INTARIAN_PEPPER_ROOT", position_limit=80),
 }
 
 
 class Trader:
-    def bid(self) -> int:
-        # GTO Market Access Fee bid.
-        #
-        # Final simulation is 1 day, so V = incremental value for one day of extra access.
-        # Extra access = 25% more quotes (testing uses 80%; full access = 100%).
-        # Incremental value per day:
-        #   - Osmium:  ~19,773/day × 0.25 ≈ 4,943  (fills scale linearly with flow)
-        #   - Pepper:  ~79,262/day × 0.05 ≈ 3,963  (conservative; mostly position-limited)
-        #   - Total V  ≈ 8,906 per day
-        #
-        # Mechanism: top 50% of bids win + pay their bid. Only need to beat the median.
-        # Nash equilibrium (uniform bids on [0,V]): bid V/2 ≈ 4,453.
-        # Bidding slightly above GTO (~V*0.56) to protect against a low-skewed distribution.
-        # Bidding above V is dominated (pay more than you gain).
-        return 5000
-
     def run(self, state: TradingState) -> Tuple[Dict[str, List[Order]], int, str]:
         saved = {}
         if state.traderData:
