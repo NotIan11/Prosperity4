@@ -282,7 +282,12 @@ PRODUCTS = {
         position_limit=80,
         order_size=15,
     ),
-}
+                "BUBBLE_POWDER": BubblePowderStrategy(
+                    "BUBBLE_POWDER",
+                    position_limit=80,
+                    order_size=15,
+                ),
+                                        }
 
 
 class Trader:
