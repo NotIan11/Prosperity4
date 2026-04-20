@@ -34,8 +34,19 @@ FAIR_VALUE = 10_000
 
 
 class OsmiumStrategy(Strategy):
+    MR_TAKE_THR = 2.5
+    MR_BUY_ADJ = 4.5
+    MR_SELL_ADJ = -5.5
+
     def __init__(self, symbol: str, position_limit: int) -> None:
         super().__init__(symbol, position_limit)
+        self.prev_mid: Optional[float] = None
+
+    def save_state(self) -> dict:
+        return {"prev_mid": self.prev_mid}
+
+    def load_state(self, data: dict) -> None:
+        self.prev_mid = data.get("prev_mid")
 
     def run(self, state: TradingState) -> List[Order]:
         order_depth: Optional[OrderDepth] = state.order_depths.get(self.symbol)
@@ -54,9 +65,26 @@ class OsmiumStrategy(Strategy):
         wall_mid = (bid_wall + ask_wall) / 2.0
         fd = wall_mid - FAIR_VALUE
 
+        # --- Autocorrelation signal: track mid price changes ---
+        mid = (best_bid + best_ask) / 2.0
+        prev_up = False
+        prev_down = False
+        if self.prev_mid is not None:
+            change = mid - self.prev_mid
+            prev_up = change > 0
+            prev_down = change < 0
+        self.prev_mid = mid
+
         # --- MR-biased taking: widen take zone when price deviates from FV ---
-        buy_adj = 4.5 if fd < -2.5 else 0
-        sell_adj = -5.5 if fd > 2.5 else 0
+        # AC-graded: full adj with tick confirmation, reduced adj without
+        if fd < -self.MR_TAKE_THR:
+            buy_adj = self.MR_BUY_ADJ if prev_down else self.MR_BUY_ADJ * 0.8
+        else:
+            buy_adj = 0
+        if fd > self.MR_TAKE_THR:
+            sell_adj = self.MR_SELL_ADJ if prev_up else self.MR_SELL_ADJ * 0.8
+        else:
+            sell_adj = 0
 
         for ask_price in sorted(order_depth.sell_orders.keys()):
             if ask_price > wall_mid - 0.5 + buy_adj:
@@ -80,18 +108,9 @@ class OsmiumStrategy(Strategy):
                 orders.append(Order(self.symbol, bid_price, -qty))
                 sells += qty
 
-        # --- MR quote shift: nudge quotes toward FV when price deviates ---
-        mr = -1 if fd > 2.0 else (1 if fd < -2.0 else 0)
-
-        # --- Dynamic wall offset: if wall is very deep, pull quote in toward best ---
-        buy_wall_dist = best_bid - bid_wall
-        sell_wall_dist = ask_wall - best_ask
-        buy_offset = max(1, buy_wall_dist // 5) if buy_wall_dist > 10 else 1
-        sell_offset = max(1, sell_wall_dist // 5) if sell_wall_dist > 10 else 1
-
         # --- Passive quoting: anchor to walls for better fill prices ---
-        buy_price = bid_wall + buy_offset + mr
-        sell_price = ask_wall - sell_offset + mr
+        buy_price = bid_wall + 1
+        sell_price = ask_wall - 1
         if buy_price >= wall_mid:
             buy_price = int(wall_mid) - 1
         if sell_price <= wall_mid:
@@ -126,11 +145,16 @@ class OsmiumStrategy(Strategy):
 
 
 class PepperStrategy(Strategy):
-    """Unconditional buy for INTARIAN_PEPPER_ROOT — ride the ~1000/day uptrend.
+    """Buy-hold for INTARIAN_PEPPER_ROOT.
 
-    Price trends continuously +~1000 ticks within each day. Maximising long exposure
-    as early as possible and holding captures nearly the full intraday range.
+    Pepper trends +1000/day (slope 0.1/tick).
+
+    MAX_PER_TICK limits how many lots we buy each tick to avoid
+    adverse impact from large orders. Set to 0 for unlimited (sweep all).
     """
+
+    MAX_PER_TICK = 10  # 0 = unlimited; 10 is optimal in backtester (+~85/day)
+    SELL_SPREAD_THR = 16  # only sell when spread >= this; 0 = disabled
 
     def __init__(self, symbol: str, position_limit: int) -> None:
         super().__init__(symbol, position_limit)
@@ -142,15 +166,29 @@ class PepperStrategy(Strategy):
 
         pos = self.get_position(state)
         orders: List[Order] = []
+        buys = 0
+        tick_cap = self.MAX_PER_TICK if self.MAX_PER_TICK > 0 else self.position_limit
 
         for ask_price in sorted(order_depth.sell_orders.keys()):
-            remaining = self.position_limit - pos
+            remaining = min(self.position_limit - pos - buys, tick_cap - buys)
             if remaining <= 0:
                 break
             qty = min(-order_depth.sell_orders[ask_price], remaining)
             if qty > 0:
                 orders.append(Order(self.symbol, ask_price, qty))
-                pos += qty
+                buys += qty
+
+        # Conditional passive sell when spread is wide
+        if self.SELL_SPREAD_THR > 0 and order_depth.buy_orders:
+            best_bid = max(order_depth.buy_orders.keys())
+            best_ask = min(order_depth.sell_orders.keys())
+            spread = best_ask - best_bid
+            if spread >= self.SELL_SPREAD_THR:
+                sell_price = best_ask - 1
+                effective_pos = pos + buys
+                sell_qty = min(10, effective_pos)
+                if sell_qty > 0:
+                    orders.append(Order(self.symbol, sell_price, -sell_qty))
 
         return orders
 
