@@ -270,7 +270,7 @@ class Trader:
         # Nash equilibrium (uniform bids on [0,V]): bid V/2 ≈ 4,453.
         # Bidding slightly above GTO (~V*0.56) to protect against a low-skewed distribution.
         # Bidding above V is dominated (pay more than you gain).
-        return 5000
+        return 4750
 
     def run(self, state: TradingState) -> Tuple[Dict[str, List[Order]], int, str]:
         saved = {}
