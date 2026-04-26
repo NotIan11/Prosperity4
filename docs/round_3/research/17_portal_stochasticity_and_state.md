@@ -2,10 +2,14 @@
 
 ## TL;DR
 
-- **IMC portal sim is non-deterministic** for take-based strategies.
-  3 runs of identical v12 code: $53,790 / $13,889 / $49,081.
-- **Cause**: stochastic bot fill behavior (counterparty='unknown' in trade
-  history). Same orders → bots randomly choose how many to hit.
+- **IMC portal sim is non-deterministic by design** in R3+ — confirmed by
+  multiple Discord users. IMC deliberately randomizes ~20% of bot orders
+  per submission to defend against overfitted strategies (per
+  `_mfb`, `k_vgent`, `lachydauth`, `noprague`, `boiled_potato5316`,
+  `acdhemtos`, `infra.bayes`, `xpresi`, dates 2026-04-20/21).
+- 3 runs of identical v12 code: $53,790 / $13,889 / $49,081.
+- **Cause**: random subset of bot orders removed each submission +
+  stochastic fill behavior. Same orders → bots randomly choose how many to hit.
 - HG (passive MM) was DETERMINISTIC across all 3 runs (always 65 fills).
   Active take strategies on VFE-correlated products varied 21-105 fills.
 - **`traderData` serialization NOT required for state persistence**.
