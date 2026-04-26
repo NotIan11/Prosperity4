@@ -14,7 +14,8 @@ hypothesis, what changed, BT numbers, learnings. Numbered sequentially.
 | [v5_pre_flatten](v5_pre_flatten.md) | abandoned | 30,812 (-9.9%) | 2.60 | 4,264 (0.85%) | — | + end-of-day pre-flatten (wrong threshold) |
 | [v6_vouchers](v6_vouchers.md) | superseded | 34,790 (+10.1%) | 2.75 | 4,326 (0.86%) | ~1,225 (est) | + VEV_5300/5400 bias-aware MM |
 | [v7_hg_inventory_cap](v7_hg_inventory_cap.md) | superseded | 34,518 (+9.2%) | 2.97 | 3,918 (0.86%) | ~1,225 (est) | + HG soft cap=40 (Calmar-optimal) |
-| **[v8_hg_takemaker](v8_hg_takemaker.md)** | **ship-candidate** | **119,578 (+278%)** | **2.35** | **19,696 (9.91%)** | **~6,682 (est)** | + Ian's HG take+derisk (PnL-optimal) |
+| [v8_hg_takemaker](v8_hg_takemaker.md) | superseded | 119,578 (+278%) | 2.35 | 19,696 (9.91%) | ~6,682 (est) | + Ian's HG take+derisk |
+| **[v9_vfe_mr_taker](v9_vfe_mr_taker.md)** | **ship-candidate** | **188,449 (+496%)** | **6.86** | **22,460 (21.10%)** | **~12,451 (est)** | + VFE MR taker w/ rolling FV (Sharpe 6.86 — best yet) |
 
 `Live est` = `BT day-2 first-1000-tick PnL / 1.37` (calibration factor from v4
 actual; see `docs/round_3/research/14_bt_vs_live_calibration.md`).
