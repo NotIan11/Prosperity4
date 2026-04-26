@@ -3,18 +3,33 @@
 One file per submission-candidate version. Each version is a snapshot:
 hypothesis, what changed, BT numbers, learnings. Numbered sequentially.
 
-## R3 FINAL SUBMISSION: **v12** (`snapshots/v12_trader.py`)
+## R3 FINAL SUBMISSION: ⭐ **v12** (`snapshots/v12_trader.py`) ⭐
 
-Live results (3 runs of identical code, portal is stochastic):
+Live results (3 runs of identical code; portal randomizes ~20% of bot
+orders per submission, so single observations are noisy):
 - sub #1: **$53,790** (best)
 - sub #2: $13,889 (bad-luck run, 25% normal fill rate)
 - sub #3: $49,081
-- Mean ~$40k, mode ~$50k, ~4x Ian's $13.5k
+- Mean ~$40k, mode ~$50k
 
-Other strategies tested live (all lost vs v12):
-- v15 (v12 + flow gate): $46,156 — gate cost $7.6k by blocking profitable trades
-- v16 (Rohit live-delta): $32,988 — less data → noisier deltas → mis-sized caps
-- Ian v2 (cap=300 uniform): $13,528 — bots dodge over-aggression in live
+## Head-to-head with strategies tested live in R3
+
+| Strategy | BT (3-day) | Live obs | Verdict |
+|--|--|--|--|
+| ⭐ **v12 (us)** | **460,722** | $14k / $49k / $54k (mean ~$40k) | **shipped** |
+| Ian v2 (uniform cap=300, 8 strikes) | **769,690** | $13,528 (1 obs) | **main contender**; bigger BT but worse single live obs. Could be bad-seed (1 obs); structurally suspect (loses on low-R² strikes like VEV_4000) |
+| v15 (v12 + flow gate) | 458,648 | $46,156 (1 obs) | gate cost $7.6k vs v12; sometimes gates profitable trades |
+| v16 (friend live-delta) | n/a | $32,988 (1 obs) | live OLS too noisy on 200-1000 sample window vs our 30k hardcoded fit |
+| Friend live-delta + Rohit grafts | n/a | n/a | not yet tested |
+
+**Key context**: BT-vs-live ratios are NOT comparable across strategies due
+to portal randomization. Ian degrades 57x BT→live; we degrade 9.2x.
+Reasons our v12 holds up better in live: (a) only trade high-R² strikes,
+(b) strike-aware caps don't over-expose deep-ITM, (c) lower total leverage.
+**Honest unknown**: with only 1 live observation of Ian v2, we can't rule
+out that his $13.5k was a bad seed and his true mean is much higher.
+
+## Index
 
 ## Index
 
