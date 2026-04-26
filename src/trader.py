@@ -1,4 +1,5 @@
 import json
+import os
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Tuple
 
@@ -8,6 +9,19 @@ try:
 except ImportError:
     # For local development
     from src.datamodel import Order, OrderDepth, TradingState  # type: ignore
+
+
+VOUCHER_SYMBOLS: Tuple[str, ...] = (
+    "VEV_4000",
+    "VEV_4500",
+    "VEV_5000",
+    "VEV_5100",
+    "VEV_5200",
+    "VEV_5300",
+    "VEV_5400",
+    "VEV_5500",
+)
+VEV_POSITION_LIMIT = int(os.environ.get("VEV_POSITION_LIMIT", "200"))
 
 
 class Strategy(ABC):
@@ -193,35 +207,80 @@ class PepperStrategy(Strategy):
 
 class HydrogelStrategy(Strategy):
     """
-    Macro mean-reversion taking strategy for HYDROGEL_PACK.
+    Hydrogel strategy ported from Lennon's implementation.
 
-    HYDROGEL oscillates around a stable fair value of 10,000.
-    When the mid price deviates more than ENTRY_THR from FV, take a
-    max-size position aggressively (sweep the book) in the direction
-    of reversion.  Hold until price crosses the opposite ENTRY_THR
-    threshold, then flip.  No passive orders are placed.
+    Uses a layered approach instead of bang-bang:
+    - Small position increments (MAX_TAKE per tick) rather than sweeping to max
+    - Passive market-making orders around FV (inventory-skewed)
+    - Three dynamic derisking triggers (no hard stop-loss by price level):
+        1. VERY_RICH_MID: price spiked far above FV → take profit aggressively
+        2. Trailing drawdown: peak_while_long - mid >= TRAILING_DRAWDOWN → start selling
+        3. EMA break: mid < ema - EMA_BREAK after a rich peak → sell cautiously
+    - block_new_buys guard prevents adding longs when price is already elevated
 
-    A stop-loss closes the position if price moves more than STOP_LOSS_TICKS
-    against the entry price (protects against sustained adverse moves).
+    This trades lower peak PnL for much smaller givebacks on adverse moves.
     """
 
-    FV: float = 10_000.0
-    ENTRY_THR: float = 30.0
-    # Stop-loss: close position if price moves this many ticks against entry.
-    # At thr=30, entry is ~30 ticks from FV. Stop at 50 ticks beyond entry
-    # (~2.5x thr) gives enough room for normal noise while cutting runaway losses.
-    # Backtest cost: ~5% of total profit; triggered ~once per adverse day.
-    STOP_LOSS_TICKS: float = 50.0
+    FAIR: float = 9_991.0
+    TAKE_EDGE: float = 18.0
+    PASSIVE_EDGE: float = 20.0
+    MAX_TAKE: int = 25
+    MAX_PASSIVE: int = 25
+    MAX_DERISK_PER_TICK: int = 40
+
+    EMA_ALPHA: float = 0.015
+    RICH_MID: float = FAIR + 35       # 10_026
+    VERY_RICH_MID: float = FAIR + 55  # 10_046
+    TRAILING_DRAWDOWN: float = 22.0
+    EMA_BREAK: float = 18.0
 
     def __init__(self, symbol: str, position_limit: int) -> None:
         super().__init__(symbol, position_limit)
-        self.entry_price: Optional[float] = None
+        self.ema_mid: Optional[float] = None
+        self.peak_mid_while_long: Optional[float] = None
 
     def save_state(self) -> dict:
-        return {"entry_price": self.entry_price}
+        return {
+            "ema_mid": self.ema_mid,
+            "peak_mid_while_long": self.peak_mid_while_long,
+        }
 
     def load_state(self, data: dict) -> None:
-        self.entry_price = data.get("entry_price")
+        self.ema_mid = data.get("ema_mid")
+        self.peak_mid_while_long = data.get("peak_mid_while_long")
+
+    def _update_state(self, mid: float, pos: int) -> None:
+        self.ema_mid = mid if self.ema_mid is None else (
+            (1.0 - self.EMA_ALPHA) * self.ema_mid + self.EMA_ALPHA * mid
+        )
+        if pos > 0:
+            self.peak_mid_while_long = mid if self.peak_mid_while_long is None else max(
+                self.peak_mid_while_long, mid
+            )
+        else:
+            self.peak_mid_while_long = mid
+
+    def _should_derisk(self, mid: float, pos: int) -> bool:
+        if pos <= 0:
+            return False
+        ema = self.ema_mid if self.ema_mid is not None else mid
+        peak = self.peak_mid_while_long if self.peak_mid_while_long is not None else mid
+        return (
+            mid >= self.VERY_RICH_MID
+            or (peak - mid >= self.TRAILING_DRAWDOWN and mid > self.FAIR + 5)
+            or (mid < ema - self.EMA_BREAK and peak > self.RICH_MID)
+        )
+
+    def _should_block_new_buys(self, mid: float, pos: int) -> bool:
+        ema = self.ema_mid if self.ema_mid is not None else mid
+        peak = self.peak_mid_while_long if self.peak_mid_while_long is not None else mid
+        if mid >= self.RICH_MID:
+            return True
+        if pos > 0 and peak - mid >= self.TRAILING_DRAWDOWN:
+            return True
+        if pos > 0 and mid < ema - self.EMA_BREAK:
+            return True
+        return False
 
     def run(self, state: TradingState) -> List[Order]:
         order_depth: Optional[OrderDepth] = state.order_depths.get(self.symbol)
@@ -232,64 +291,78 @@ class HydrogelStrategy(Strategy):
         best_bid = max(order_depth.buy_orders.keys())
         best_ask = min(order_depth.sell_orders.keys())
         mid = (best_bid + best_ask) / 2.0
-        dev = mid - self.FV
+
+        self._update_state(mid, pos)
 
         orders: List[Order] = []
+        bought = 0
+        sold = 0
 
-        # Stop-loss: close losing position before it grows further
-        if self.entry_price is not None and pos != 0:
-            loss = (mid - self.entry_price) * pos  # negative when losing
-            if loss < -self.STOP_LOSS_TICKS * abs(pos):
-                if pos > 0:
-                    for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
-                        remaining = pos - sum(-o.quantity for o in orders)
-                        if remaining <= 0:
-                            break
-                        qty = min(order_depth.buy_orders[bid_price], remaining)
-                        if qty > 0:
-                            orders.append(Order(self.symbol, bid_price, -qty))
-                else:
-                    for ask_price in sorted(order_depth.sell_orders.keys()):
-                        remaining = -pos - sum(o.quantity for o in orders)
-                        if remaining <= 0:
-                            break
-                        qty = min(-order_depth.sell_orders[ask_price], remaining)
-                        if qty > 0:
-                            orders.append(Order(self.symbol, ask_price, qty))
-                self.entry_price = None
-                return orders
-
-        buys = 0
-        sells = 0
-
-        if dev < -self.ENTRY_THR and pos < self.position_limit:
-            # Price too low → sweep asks to reach max-long position
-            for ask_price in sorted(order_depth.sell_orders.keys()):
-                remaining = self.position_limit - pos - buys
-                if remaining <= 0:
-                    break
-                qty = min(-order_depth.sell_orders[ask_price], remaining)
-                if qty > 0:
-                    orders.append(Order(self.symbol, ask_price, qty))
-                    buys += qty
-            if buys > 0:
-                self.entry_price = mid
-
-        elif dev > self.ENTRY_THR and pos > -self.position_limit:
-            # Price too high → sweep bids to reach max-short position
+        # Dynamic derisking: sell into bids when trailing drawdown or EMA break fires
+        if self._should_derisk(mid, pos):
+            ema = self.ema_mid if self.ema_mid is not None else mid
+            peak = self.peak_mid_while_long if self.peak_mid_while_long is not None else mid
             for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
-                remaining = self.position_limit + pos - sells
+                if sold >= self.MAX_DERISK_PER_TICK:
+                    break
+                if mid >= self.VERY_RICH_MID:
+                    min_bid = self.FAIR + 25
+                elif peak - mid >= self.TRAILING_DRAWDOWN:
+                    min_bid = self.FAIR + 8
+                elif mid < ema - self.EMA_BREAK:
+                    min_bid = self.FAIR
+                else:
+                    min_bid = self.FAIR + self.TAKE_EDGE
+                if bid_price < min_bid:
+                    break
+                remaining = pos - sold
                 if remaining <= 0:
                     break
-                qty = min(order_depth.buy_orders[bid_price], remaining)
+                qty = min(order_depth.buy_orders[bid_price], remaining, self.MAX_DERISK_PER_TICK - sold)
                 if qty > 0:
                     orders.append(Order(self.symbol, bid_price, -qty))
-                    sells += qty
-            if sells > 0:
-                self.entry_price = mid
+                    sold += qty
 
-        elif pos == 0:
-            self.entry_price = None
+        block_new_buys = self._should_block_new_buys(mid, pos)
+
+        # Aggressive takes on cheap asks
+        if not block_new_buys:
+            for ask_price in sorted(order_depth.sell_orders.keys()):
+                if ask_price > self.FAIR - self.TAKE_EDGE:
+                    break
+                cap = min(self.position_limit - pos - bought, self.MAX_TAKE - bought)
+                if cap <= 0:
+                    break
+                qty = min(-order_depth.sell_orders[ask_price], cap)
+                if qty > 0:
+                    orders.append(Order(self.symbol, ask_price, qty))
+                    bought += qty
+
+        # Aggressive takes on rich bids
+        for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
+            if bid_price < self.FAIR + self.TAKE_EDGE:
+                break
+            cap = min(self.position_limit + pos - sold, self.MAX_TAKE - sold)
+            if cap <= 0:
+                break
+            qty = min(order_depth.buy_orders[bid_price], cap)
+            if qty > 0:
+                orders.append(Order(self.symbol, bid_price, -qty))
+                sold += qty
+
+        # Passive market-making (inventory-skewed)
+        effective_pos = pos + bought - sold
+        inv_skew = int(round(8 * effective_pos / max(self.position_limit, 1)))
+        bid_px = int(self.FAIR - self.PASSIVE_EDGE - inv_skew)
+        ask_px = int(self.FAIR + self.PASSIVE_EDGE - inv_skew)
+
+        buy_cap  = min(self.position_limit - pos - bought,  self.MAX_PASSIVE)
+        sell_cap = min(self.position_limit + pos - sold,    self.MAX_PASSIVE)
+
+        if not block_new_buys and buy_cap > 0:
+            orders.append(Order(self.symbol, bid_px, buy_cap))
+        if sell_cap > 0:
+            orders.append(Order(self.symbol, ask_px, -sell_cap))
 
         return orders
 
@@ -400,13 +473,10 @@ class VevOptionStrategy(Strategy):
     S only, confirmed empirically). This means we can trade them exactly like
     the underlying: when S deviates from FV, take a max option position in the
     direction of reversion.
-    
+
     The signal (S deviation) is read from the VELVETFRUIT book each tick, not
     from this instrument's own price. Stop-loss is triggered if the underlying
     moves STOP_LOSS_TICKS adverse to the entry direction.
-
-    Backtest (per strike, pos_limit=300):
-      VEV_5100: +110,700  VEV_5200: +84,600  VEV_5300: +51,900
     """
 
     UNDERLYING: str = "VELVETFRUIT_EXTRACT"
@@ -427,8 +497,14 @@ class VevOptionStrategy(Strategy):
     def run(self, state: TradingState) -> List[Order]:
         order_depth: Optional[OrderDepth] = state.order_depths.get(self.symbol)
         und_depth: Optional[OrderDepth] = state.order_depths.get(self.UNDERLYING)
-        if (order_depth is None or not order_depth.buy_orders or not order_depth.sell_orders
-                or und_depth is None or not und_depth.buy_orders or not und_depth.sell_orders):
+        if (
+            order_depth is None
+            or not order_depth.buy_orders
+            or not order_depth.sell_orders
+            or und_depth is None
+            or not und_depth.buy_orders
+            or not und_depth.sell_orders
+        ):
             return []
 
         pos = self.get_position(state)
@@ -439,7 +515,7 @@ class VevOptionStrategy(Strategy):
 
         orders: List[Order] = []
 
-        # Stop-loss: close if underlying moved STOP_LOSS_TICKS adverse to position
+        # Stop-loss: close if underlying moved STOP_LOSS_TICKS adverse to position.
         if self.entry_underlying is not None and pos != 0:
             adverse = (self.entry_underlying - S) if pos > 0 else (S - self.entry_underlying)
             if adverse > self.STOP_LOSS_TICKS:
@@ -495,14 +571,19 @@ class VevOptionStrategy(Strategy):
         return orders
 
 
-PRODUCTS = {
+PRODUCTS: Dict[str, Strategy] = {
     "ASH_COATED_OSMIUM": OsmiumStrategy("ASH_COATED_OSMIUM", position_limit=80),
     "INTARIAN_PEPPER_ROOT": PepperStrategy("INTARIAN_PEPPER_ROOT", position_limit=80),
     "HYDROGEL_PACK": HydrogelStrategy("HYDROGEL_PACK", position_limit=200),
     "VELVETFRUIT_EXTRACT": VelvetfruitStrategy("VELVETFRUIT_EXTRACT", position_limit=200),
-    "VEV_5100": VevOptionStrategy("VEV_5100", position_limit=300),
-    "VEV_5200": VevOptionStrategy("VEV_5200", position_limit=300),
-    "VEV_5300": VevOptionStrategy("VEV_5300", position_limit=300),
+    "VEV_4000": VevOptionStrategy("VEV_4000", position_limit=VEV_POSITION_LIMIT),
+    "VEV_4500": VevOptionStrategy("VEV_4500", position_limit=VEV_POSITION_LIMIT),
+    "VEV_5000": VevOptionStrategy("VEV_5000", position_limit=VEV_POSITION_LIMIT),
+    "VEV_5100": VevOptionStrategy("VEV_5100", position_limit=VEV_POSITION_LIMIT),
+    "VEV_5200": VevOptionStrategy("VEV_5200", position_limit=VEV_POSITION_LIMIT),
+    "VEV_5300": VevOptionStrategy("VEV_5300", position_limit=VEV_POSITION_LIMIT),
+    "VEV_5400": VevOptionStrategy("VEV_5400", position_limit=VEV_POSITION_LIMIT),
+    "VEV_5500": VevOptionStrategy("VEV_5500", position_limit=VEV_POSITION_LIMIT),
 }
 
 

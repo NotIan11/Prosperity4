@@ -76,11 +76,11 @@ C_VELVET   = "#238b45"
 C_VOUCHER  = "#d94801"
 C_NET      = "#6a3d9a"
 
-HIST_LOG_IDS = ["446230", "451894", "454537", "455790", "460222"]
-HIST_COLORS  = ["#9ecae1", "#74c476", "#fdae6b", "#fd8d3c", "#e6550d"]
+HIST_LOG_IDS = ["446230", "451894", "454537", "455790", "460222", "462153"]
+HIST_COLORS  = ["#9ecae1", "#74c476", "#fdae6b", "#fd8d3c", "#e6550d", "#a63603"]
 
-NEW_LOG_ID  = "462153"
-BACKTEST_ID = "backtest-1777184301555"
+NEW_LOG_ID  = "464669"
+BACKTEST_ID = "backtest-1777185929489"
 
 
 def plot_pnl_panel(ax: plt.Axes, pnl: pd.DataFrame, title: str,
