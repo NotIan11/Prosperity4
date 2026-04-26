@@ -5,14 +5,41 @@
 IMC Prosperity 4 algorithmic trading competition, GOAT phase (Rounds 3, 4, 5).
 PnL was reset at start of R3 — only R3–R5 results count toward final ranking.
 
-## Current state
+## ⭐ NEW SESSION? START HERE
 
-- Branch: `ben-r3`. Repo was wiped to a clean baseline; we are rebuilding.
-- Docs ingested so far: `docs/competition.md` (cross-round Prosperity rules),
-  `docs/round_3/brief.md` (R3 algo + manual challenges).
-- No code in `src/` yet. No data in `data/` yet. No notebooks yet.
-- **Next step**: ingest historical data from the IMC Data Capsule and run
-  exploratory notebooks on VFE / vouchers / hydrogel.
+If you're a fresh Claude resuming this project for R4/R5, read these in order
+before doing anything else:
+
+1. **`docs/round_3/JOURNEY.md`** — full v1→v12 narrative (5 min read).
+   Final R3 ship: `docs/round_3/strategies/snapshots/v12_trader.py`.
+   Live result: ~$50k mean (best run $53,790, ~4x Ian's $13.5k).
+2. **`docs/round_3/strategies/README.md`** — version index table.
+3. **`docs/round_3/strategies/v12_cap_160.md`** — current ship strategy doc.
+4. **`docs/round_3/research/17_portal_stochasticity_and_state.md`** —
+   critical late finding: portal is non-deterministic, traderData is
+   defensive hygiene, live > BT slice means state DOES persist on IMC.
+5. **`docs/round_3/research/16_regime_patterns.md`** — empirical voucher
+   deltas, the basis for our strike-aware sizing.
+
+Key R4/R5 carry-over candidates (untried, in priority order):
+- Add `traderData` JSON round-trip to all stateful strategies (defensive).
+- Hybrid hardcoded + live-delta blend (start with hardcoded, blend toward
+  live OLS as samples accumulate). Pure live-delta lost $20k vs v12 (v16).
+- Informed-flow as **sizing tilt** (50% cap on adverse flow), not binary
+  gate (binary gate cost $7.6k live; v15 post-mortem).
+- Defensive cap reduction if rolling-FV drifts > 50 ticks from 5250.
+
+## Current state (post R3)
+
+- Branch: `ben-r3`. v12 shipped, live ~$50k mean.
+- All v1-v16 strategy iterations documented in `docs/round_3/strategies/`.
+- 16 research docs in `docs/round_3/research/` covering EDA, BT calibration,
+  teammate strategy comparisons, regime patterns.
+- Tooling: `notebooks/99_trader_bt_explorer.ipynb` (BT + plots for any
+  trader), `notebooks/v12_bt_vs_live.ipynb` (side-by-side), `scripts/bt_dual.py`
+  (full + portal-slice + live estimate).
+- Live logs: `data/live_logs/v12/` (3 runs), `data/live_logs/v15/`.
+- Teammate logs: `data/teammate_logs/{ian,ian2,rohit,rohit_wack,friend_live_delta}/`.
 
 ## Pending docs to ingest (paste from Notion when ready)
 
@@ -83,9 +110,9 @@ PnL was reset at start of R3 — only R3–R5 results count toward final ranking
   *meta-context* (how people thought, what tools they built, what failure
   modes they hit) but are NOT directly applicable. Mechanics, products, and
   position limits change every year. Never copy a prior-year recipe verbatim.
-- `prosp4r3/` is a local-only dump from a prior session (gitignored). Useful
-  files (trade summaries, prior trader iterations) get migrated into
-  `data/` or `docs/` explicitly. Do not treat it as authoritative.
+- `prosp4r3/` was a local-only dump from a prior session (gitignored).
+  Deleted at end of R3. Anything we wanted from it is already in `data/`
+  or `docs/`.
 
 ## Working style
 
