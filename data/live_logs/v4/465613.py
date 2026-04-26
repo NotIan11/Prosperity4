@@ -1,18 +1,14 @@
-"""IMC Prosperity 4 R3 trader.
+"""IMC Prosperity 4 R3 trader — modular baseline.
 
-Goods (HYDROGEL_PACK + VELVETFRUIT_EXTRACT):
-  - HYDROGEL: passive MM at wall_mid +/- half_edge=8.
-  - VFE: passive MM with asymmetric edges (bid=2/ask=3) — defends against
-    informed buy-aggressor (07_bot_trades.md: +0.63/50t, t=+2.64). Plus
-    L1-L2 skew (10_iacobus_l1_l2_signal.md): when L1 narrower than L2 by 3+,
-    lean long by 1 tick.
+Goods side (HYDROGEL_PACK + VELVETFRUIT_EXTRACT):
+  - HYDROGEL: passive market-make at wall_mid +/- half_edge with position skew.
+    Independent product, lag-1 autocorr -0.13, median spread 16.
+  - VELVETFRUIT_EXTRACT: passive market-make, tighter (median spread 5).
+    Asymmetric edges (bid=2/ask=3) defend against informed buy-aggressor
+    (07_bot_trades.md: +0.63/50t drift, t=+2.64). Plus L1-L2 skew bias
+    (10_iacobus_l1_l2_signal.md): when L1 is much narrower than L2, lean long.
 
-Vouchers (v6):
-  - VEV_5300 (historically rich +1.83 ticks per 05_voucher_chain.md):
-    asymmetric MM with at-touch ask (edge=0), under-bid (edge=1) -> net short bias.
-  - VEV_5400 (historically cheap -2.0 ticks): inverse asymmetric MM.
-  - Other vouchers untraded — wide spreads (no historical fills inside) or
-    dead books (VEV_6000/6500 ghost trades).
+Vouchers (VEV_*): not traded here.
 """
 from typing import Any
 
@@ -25,8 +21,6 @@ except ImportError:
 POSITION_LIMITS = {
     "HYDROGEL_PACK": 200,
     "VELVETFRUIT_EXTRACT": 200,
-    "VEV_5300": 300,
-    "VEV_5400": 300,
 }
 
 
@@ -115,18 +109,6 @@ class Trader:
                 bid_edge=2, ask_edge=3,            # v2 asymmetric defense
                 use_l1l2=True,                     # v4 L1-L2 skew
                 l1l2_threshold=-3, l1l2_skew=1,
-            ),
-            # v6: voucher MM with bias from historical residuals
-            # (05_voucher_chain.md: 5300 rich +1.83, 5400 cheap -2.0).
-            "VEV_5300": PassiveMarketMaker(  # rich -> bias net short (tighter ask)
-                "VEV_5300", POSITION_LIMITS["VEV_5300"],
-                half_edge=1, skew_per_unit=0.02,
-                bid_edge=1, ask_edge=0,
-            ),
-            "VEV_5400": PassiveMarketMaker(  # cheap -> bias net long (tighter bid)
-                "VEV_5400", POSITION_LIMITS["VEV_5400"],
-                half_edge=1, skew_per_unit=0.02,
-                bid_edge=1, ask_edge=2,
             ),
         }
 

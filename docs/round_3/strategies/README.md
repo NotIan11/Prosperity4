@@ -10,7 +10,9 @@ hypothesis, what changed, BT numbers, learnings. Numbered sequentially.
 | [v1_baseline](v1_baseline.md) | baseline | 31,606 | 2.50 | 4,459 (1.25%) | HG h=8 sym + VFE h=2 sym, no vouchers |
 | [v2_vfe_asymmetric](v2_vfe_asymmetric.md) | tested | 33,676 (+6.5%) | 2.46 | 4,264 (1.20%) | + VFE bid=2/ask=3 |
 | [v3_vfe_flow_skew](v3_vfe_flow_skew.md) | abandoned | 31,222 (-7.3%) | 4.62 | 4,816 (1.24%) | + flow-tracker skew (too sticky, lost PnL) |
-| **[v4_vfe_l1l2_skew](v4_vfe_l1l2_skew.md)** | **ship-candidate** | **34,182 (+8.2%)** | **2.57** | **4,264 (0.85%)** | + L1-L2 skew (Calmar 8.02 — best yet) |
+| [v4_vfe_l1l2_skew](v4_vfe_l1l2_skew.md) | superseded | 34,182 (+8.2%) | 2.57 | 4,264 (0.85%) | + L1-L2 skew |
+| [v5_pre_flatten](v5_pre_flatten.md) | abandoned | 30,812 (-9.9%) | 2.60 | 4,264 (0.85%) | + end-of-day pre-flatten (BT regression — wrong temporal location) |
+| **[v6_vouchers](v6_vouchers.md)** | **ship-candidate** | **34,790 (+10.1%)** | **2.75** | **4,326 (0.86%)** | + VEV_5300/5400 bias-aware MM |
 
 ## Snapshots
 
