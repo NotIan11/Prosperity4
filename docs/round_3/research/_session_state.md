@@ -10,8 +10,10 @@ Last updated: 2026-04-26 ~01:00 ET. Round 3 ends in ~4 hours from this writing.
 - All three P3 winner repos analyzed (`02a_frankfurt.md`, `02b_cmu.md`,
   `02c_ucsd.md`).
 - Reddit P4 prep guide saved (`02_reddit_p4_post.md`).
-- Tooling landscape mapped (`03_tooling_landscape.md`); `prosperity3bt`
-  works for P4 R3 with patched `LIMITS` — see `scripts/bt_spike.py`.
+- Tooling locked: `prosperity4btest` (in `requirements.txt`) is the
+  single backtester. Has correct P4 LIMITS hardcoded, includes risk
+  metrics. Run via `venv/bin/prosperity4btest cli src/trader.py 3`.
+  See `03_tooling_landscape.md`.
 - Discord export complete in `data/discord/` (gitignored). 4 channels
   pulled from After 2026-04-20: algo-trading, general, manual-trading,
   opensource.
