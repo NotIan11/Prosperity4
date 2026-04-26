@@ -1,0 +1,31 @@
+{
+  "run_id": "backtest-1777149251718",
+  "trader": "trader.py",
+  "dataset": "round3",
+  "results": [
+    {
+      "set": "D=0",
+      "day": 0,
+      "tick_count": 10000,
+      "own_trade_count": 352,
+      "final_pnl_total": 36771.0,
+      "run_dir": "runs/backtest-1777149251718-round3-day-0"
+    },
+    {
+      "set": "D+1",
+      "day": 1,
+      "tick_count": 10000,
+      "own_trade_count": 336,
+      "final_pnl_total": 45548.0,
+      "run_dir": "runs/backtest-1777149251718-round3-day+1"
+    },
+    {
+      "set": "D+2",
+      "day": 2,
+      "tick_count": 10000,
+      "own_trade_count": 290,
+      "final_pnl_total": 36864.0,
+      "run_dir": "runs/backtest-1777149251718-round3-day+2"
+    }
+  ]
+}

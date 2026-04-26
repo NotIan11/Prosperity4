@@ -249,9 +249,168 @@ class PepperCyclingStrategy(Strategy):
         return orders
 
 
+class HydrogelStrategy(Strategy):
+    """
+    HYDROGEL_PACK mean-reversion around a dynamic Wall Mid fair value.
+
+    Fair value is computed each tick as the midpoint of the outermost
+    bid and ask walls visible in the order book:
+        wall_mid = (min_bid + max_ask) / 2
+    This adapts to slow price drift rather than anchoring to a fixed 10,000.
+
+    Base behaviour: take asks ≤ FV - TAKE_EDGE, bids ≥ FV + TAKE_EDGE,
+    and post passive resting orders at FV ± PASSIVE_SPREAD.
+
+    Trend guard (defensive, magnitude-based): compute the total mid-price
+    change over the last TREND_WINDOW ticks. When it drops by more than
+    TREND_DROP_THR, sell existing longs to flat and suppress buying.
+    Mirror for rises. The guard never goes directional; it only unwinds
+    existing exposure and pauses new entries.
+    """
+
+    TAKE_EDGE = 8
+    PASSIVE_SPREAD = 7
+    SOFT_LIMIT_FRAC = 0.7
+
+    # Trend detection — magnitude-based
+    TREND_WINDOW = 10
+    TREND_DROP_THR = 25
+
+    def __init__(self, symbol: str, position_limit: int) -> None:
+        super().__init__(symbol, position_limit)
+        self.mid_history: List[float] = []
+
+    def save_state(self) -> dict:
+        return {"mid_history": self.mid_history[-(self.TREND_WINDOW + 1):]}
+
+    def load_state(self, data: dict) -> None:
+        self.mid_history = data.get("mid_history", [])
+
+    def _detect_trend(self, mid: float) -> int:
+        self.mid_history.append(mid)
+        if len(self.mid_history) > self.TREND_WINDOW + 1:
+            self.mid_history = self.mid_history[-(self.TREND_WINDOW + 1):]
+
+        if len(self.mid_history) <= self.TREND_WINDOW:
+            return 0
+
+        total_change = self.mid_history[-1] - self.mid_history[-(self.TREND_WINDOW + 1)]
+
+        if total_change <= -self.TREND_DROP_THR:
+            return -1
+        if total_change >= self.TREND_DROP_THR:
+            return 1
+        return 0
+
+    def run(self, state: TradingState) -> List[Order]:
+        order_depth: Optional[OrderDepth] = state.order_depths.get(self.symbol)
+        if order_depth is None or not order_depth.buy_orders or not order_depth.sell_orders:
+            return []
+
+        pos = self.get_position(state)
+        orders: List[Order] = []
+        buys = 0
+        sells = 0
+
+        best_bid = max(order_depth.buy_orders.keys())
+        best_ask = min(order_depth.sell_orders.keys())
+        wall_bid = min(order_depth.buy_orders.keys())
+        wall_ask = max(order_depth.sell_orders.keys())
+        wall_mid = (wall_bid + wall_ask) / 2.0
+
+        mid = (best_bid + best_ask) / 2.0
+        trend = self._detect_trend(mid)
+
+        if trend == -1:
+            # --- Downtrend: suppress buying, keep selling at edge ---
+            sell_thr = wall_mid + self.TAKE_EDGE
+
+            for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
+                if bid_price < sell_thr:
+                    break
+                remaining = self.position_limit + pos - sells
+                if remaining <= 0:
+                    break
+                qty = min(order_depth.buy_orders[bid_price], remaining)
+                if qty > 0:
+                    orders.append(Order(self.symbol, bid_price, -qty))
+                    sells += qty
+
+            sell_cap = self.position_limit + pos - sells
+            if sell_cap > 0:
+                passive_ask_px = round(wall_mid + self.PASSIVE_SPREAD)
+                orders.append(Order(self.symbol, passive_ask_px, -sell_cap))
+
+        elif trend == 1:
+            # --- Uptrend: suppress selling, keep buying at edge ---
+            buy_thr = wall_mid - self.TAKE_EDGE
+
+            for ask_price in sorted(order_depth.sell_orders.keys()):
+                if ask_price > buy_thr:
+                    break
+                remaining = self.position_limit - pos - buys
+                if remaining <= 0:
+                    break
+                qty = min(-order_depth.sell_orders[ask_price], remaining)
+                if qty > 0:
+                    orders.append(Order(self.symbol, ask_price, qty))
+                    buys += qty
+
+            buy_cap = self.position_limit - pos - buys
+            if buy_cap > 0:
+                passive_bid_px = round(wall_mid - self.PASSIVE_SPREAD)
+                orders.append(Order(self.symbol, passive_bid_px, buy_cap))
+
+        else:
+            # --- Neutral: standard mean-reversion ---
+            buy_thr = wall_mid - self.TAKE_EDGE
+            sell_thr = wall_mid + self.TAKE_EDGE
+
+            for ask_price in sorted(order_depth.sell_orders.keys()):
+                if ask_price > buy_thr:
+                    break
+                remaining = self.position_limit - pos - buys
+                if remaining <= 0:
+                    break
+                qty = min(-order_depth.sell_orders[ask_price], remaining)
+                if qty > 0:
+                    orders.append(Order(self.symbol, ask_price, qty))
+                    buys += qty
+
+            for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
+                if bid_price < sell_thr:
+                    break
+                remaining = self.position_limit + pos - sells
+                if remaining <= 0:
+                    break
+                qty = min(order_depth.buy_orders[bid_price], remaining)
+                if qty > 0:
+                    orders.append(Order(self.symbol, bid_price, -qty))
+                    sells += qty
+
+            soft_limit = int(self.position_limit * self.SOFT_LIMIT_FRAC)
+            effective_pos = pos + buys - sells
+            skew = round(self.PASSIVE_SPREAD * effective_pos / max(soft_limit, 1))
+            skew = max(-self.PASSIVE_SPREAD, min(self.PASSIVE_SPREAD, skew))
+
+            passive_bid_px = round(wall_mid - self.PASSIVE_SPREAD - skew)
+            passive_ask_px = round(wall_mid + self.PASSIVE_SPREAD - skew)
+
+            buy_cap = self.position_limit - pos - buys
+            sell_cap = self.position_limit + pos - sells
+
+            if buy_cap > 0 and effective_pos < soft_limit:
+                orders.append(Order(self.symbol, passive_bid_px, buy_cap))
+            if sell_cap > 0 and effective_pos > -soft_limit:
+                orders.append(Order(self.symbol, passive_ask_px, -sell_cap))
+
+        return orders
+
+
 PRODUCTS = {
     "ASH_COATED_OSMIUM": OsmiumStrategy("ASH_COATED_OSMIUM", position_limit=80),
     "INTARIAN_PEPPER_ROOT": PepperStrategy("INTARIAN_PEPPER_ROOT", position_limit=80),
+    "HYDROGEL_PACK": HydrogelStrategy("HYDROGEL_PACK", position_limit=200),
 }
 
 
