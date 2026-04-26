@@ -26,6 +26,7 @@ aggressive — see `v15_gate_cap.md` for post-mortem.
 | **[v12_cap_160](v12_cap_160.md)** | **SHIP — best live** | **460,722 (+1358%)** | **5.20** | **60,493 (20.11%)** | **53,790 LIVE ✓** | v10 + voucher cap target 80→160 |
 | [v13_cap_240](v13_cap_240.md) | abandoned | 479,276 (+1417%) | (lower) | (higher) | ~33,985 (est) | v12 + cap→240 (past elbow, +4% PnL only) |
 | [v15_gate_cap](v15_gate_cap.md) | abandoned | 458,648 (+1351%) | 5.50 | 60,493 (20.11%) | **46,156 LIVE** (-$7.6k vs v12) | v11+v12; gate kills profitable trades live |
+| [v16_friend_live_delta](v16_friend_live_delta.md) | abandoned (friend) | n/a | n/a | n/a | **32,988 LIVE** (-$20.8k vs v12) | Live OLS delta refit; less data than 30k hardcoded → noisier caps |
 
 `Live est` = `BT day-2 first-1000-tick PnL / 1.37` (calibration factor from v4
 actual; see `docs/round_3/research/14_bt_vs_live_calibration.md`).
