@@ -1,21 +1,13 @@
 # Python
 .venv/
+venv/
 __pycache__/
 *.pyc
 *.pyo
 .ipynb_checkpoints/
 
-# IDE / OS
-.vscode/
-.idea/
+# OS
 .DS_Store
 
-# Build
-*.egg-info/
-dist/
-build/
-
-# Local-only (results, archives, scratch)
-backtests/
-submissions/
+# Raw zip archives — unzipped CSVs in data/ are the source of truth.
 *.zip

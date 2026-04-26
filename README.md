@@ -1,7 +1,7 @@
 # Prosperity4 — GOAT phase (R3–R5)
 
-IMC Prosperity 4. Building from a clean slate for the Great Orbital Ascension
-Trials. Branch: `ben-r3`.
+IMC Prosperity 4. Clean slate for the Great Orbital Ascension Trials.
+Branch: `ben-r3`.
 
 ## Setup
 
@@ -14,12 +14,7 @@ pip install -r requirements.txt
 ## Layout
 
 ```
-docs/                  # platform docs + per-round strategy notes
-  round_3/             # R3 brief, exploration, strategy
-src/                   # (will be added) submission code
-data/                  # (will be added) raw CSVs from portal
+docs/    # market knowledge, product behavior, per-round notes
+src/     # (TBD) submission code
+data/    # (TBD) raw CSVs from portal
 ```
-
-## Round 3
-
-See `docs/round_3/brief.md` for the official R3 spec.

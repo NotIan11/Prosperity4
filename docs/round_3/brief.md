@@ -1,82 +1,85 @@
-# Round 3 Brief
+# Round 3 — Brief
 
-Source: IMC Prosperity 4 wiki, R3 (transcribed).
+Sourced from the IMC R3 wiki text and ARIA Uplink R3 video transcript.
 
 ---
 
-## Leaderboard reset
+## Meta
 
-R3 begins the **Great Orbital Ascension Trials** (R3+R4+R5). All teams start at zero PnL.
-Only R3–R5 PnL counts toward the final ranking. R1+R2 results are discarded.
-
-Round length: **48 hours** each.
+- R3 starts the **GOAT phase** (Great Orbital Ascension Trials).
+- **Leaderboard resets to 0** at start of R3. Pre-R3 PnL discarded.
+- Each round = **48 hours** (Solvenarian day).
+- Like in previous rounds, any open positions at end of round are **automatically liquidated against a hidden fair value**.
 
 ---
 
 ## Algorithmic challenge — "Options Require Decisions"
 
+Two asset classes:
+- `HYDROGEL_PACK` and `VELVETFRUIT_EXTRACT` are **"delta 1"** products (similar to tutorial / R1 / R2 products).
+- 10 `VELVETFRUIT_EXTRACT_VOUCHER` products are **options**.
+
+All products trade independently, even though voucher price may relate to VFE due to the nature of options.
+
+**VEV** = **V**elvetfruit **E**xtract **V**oucher. Suffix = strike price.
+
 ### Products
 
-| Symbol | Class | Position Limit |
+| Symbol | Class | Position limit |
 |---|---|---|
 | `HYDROGEL_PACK` | delta-1 | 200 |
-| `VELVETFRUIT_EXTRACT` | delta-1 (option underlying) | 200 |
-| `VEV_4000` … `VEV_6500` | call options on VFE | 300 each |
+| `VELVETFRUIT_EXTRACT` | delta-1 | 200 |
+| `VEV_4000` | option, strike 4000 | 300 |
+| `VEV_4500` | option, strike 4500 | 300 |
+| `VEV_5000` | option, strike 5000 | 300 |
+| `VEV_5100` | option, strike 5100 | 300 |
+| `VEV_5200` | option, strike 5200 | 300 |
+| `VEV_5300` | option, strike 5300 | 300 |
+| `VEV_5400` | option, strike 5400 | 300 |
+| `VEV_5500` | option, strike 5500 | 300 |
+| `VEV_6000` | option, strike 6000 | 300 |
+| `VEV_6500` | option, strike 6500 | 300 |
 
-Voucher strikes (10 total):
-**4000, 4500, 5000, 5100, 5200, 5300, 5400, 5500, 6000, 6500**
+### Voucher rules
 
-Note the tight cluster from 5100–5500 (5 strikes) — implies the underlying trades around there.
-4000/4500 deep ITM, 6000/6500 deep OTM.
-
-### Time to expiry
-
-- 7-day expiration measured from start of R1 (1 round = 1 day).
-- **At start of R3 final simulation: TTE = 5 days.**
-- Historical data: TTE=8d (day 0 / tutorial), 7d (day 1 / R1), 6d (day 2 / R2).
-- Vouchers cannot be exercised early.
-- Inventory does NOT carry between rounds. End-of-round positions liquidate against hidden fair value.
-
-### Implied tasks
-
-1. **HYDROGEL_PACK** — analyse spot dynamics, market-make.
-2. **VELVETFRUIT_EXTRACT** — analyse spot dynamics, market-make.
-3. **Vouchers** — Black-Scholes (or similar) pricing using VFE as underlying. Trade against bot mispricing. With TTE=5d and 10 strikes spread across moneyness, classic vol-surface trade.
+- Each voucher gives the right to buy VFE at a later point for the strike price.
+- **Cannot be exercised before expiry.**
+- All 10 vouchers share a **7-day expiration** measured from start of R1 (1 round = 1 day).
+- TTE schedule:
+  - Historical day 0 (tutorial): TTE = 8d
+  - Historical day 1 (R1): TTE = 7d
+  - Historical day 2 (R2): TTE = 6d
+  - **R3 final sim: TTE = 5d**
+- Voucher inventory does not carry over into the next round.
 
 ---
 
-## Manual challenge — "Celestial Gardeners' Guild"
+## Manual challenge — "The Celestial Gardeners' Guild"
 
-Sealed two-bid auction, separate from algo submission.
+### Setup
 
-### Mechanics
+- Guild appears in **R3 only**; departs after.
+- Trade **at most once** with each of a **secret number** of counterparties (the "gardeners" / "Guardeners"); each has a hidden **reserve price**.
+- Acquired Bio-Pods are auto-sold next trading day at fixed fair price **920**.
+- Submitted via Manual Challenge Overview GUI, separate from algo upload. Re-submittable until round end; last submission locks.
 
-- Counterparties (secret number) have reserve prices uniformly distributed on **{670, 675, 680, …, 915, 920}** — i.e. multiples of 5 from 670–920.
-- You sell biopods next round at fixed **920**.
-- Submit **two bids** per session.
+### Reserve price distribution
 
-**Bid resolution:**
-- If `bid1 > reserve` → trade at `bid1`, profit = `920 - bid1`.
-- Else if `bid2 > reserve` AND `bid2 > mean_of_all_players_bid2` → trade at `bid2`, profit = `920 - bid2`.
-- Else if `bid2 > reserve` AND `bid2 ≤ mean_of_all_players_bid2` → trade at `bid2` BUT profit multiplied by:
+- Uniformly distributed over integers in increments of **5** between **670 and 920** (inclusive on both ends).
+- Example: reserves at 675 and 680 are valid; 676/677/678/679 are not.
+- Guild superstition: "Power of the flowering fives" — reflects the 5-step spacing.
+
+### Bid mechanics
+
+Submit **two bids**. For each gardener with reserve `r`:
+
+1. **If `bid1 > r`** → trade at `bid1`.
+2. **Else if `bid2 > r`**:
+   - **If `bid2 > avg_b2`** (mean of all players' second bids) → trade at `bid2`.
+   - **If `bid2 ≤ avg_b2`** → trade at `bid2`, but PnL is penalised by:
 
 ```
 ( (920 - avg_b2) / (920 - bid2) )^3
 ```
 
-- Else → no trade.
-
-### Strategy notes
-
-- The penalty formula creates a soft cliff: bidding below the average b2 still trades, but profit collapses cubically as you go further below.
-- Optimal b2 ≈ predicted average of other players' b2s (so multiplier ≈ 1).
-- Bid 1 should be aggressive-low to capture cheap counterparties; bid 2 is the "safety net" that scoops the rest.
-- This is a meta-game — depends on what other teams will do.
-
----
-
-## Open questions to resolve
-
-1. **Are R1/R2 products still tradable in R3?** Wiki only lists the 3 new products. Likely NO, but confirm by inspecting `state.order_depths` in the first backtest run.
-2. **Velvetfruit price level + volatility** — need to load the historical CSVs.
-3. **Voucher market structure** — how wide are spreads, what's the implied vol surface look like?
+3. **Else** → no trade.
