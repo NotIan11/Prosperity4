@@ -391,118 +391,11 @@ class VelvetfruitStrategy(Strategy):
         return orders
 
 
-class VevOptionStrategy(Strategy):
-    """
-    Options overlay using the VELVETFRUIT_EXTRACT price as the signal.
-
-    VEV_XXXX are European call options on VELVETFRUIT_EXTRACT priced by the
-    BOT via a no-theta BS surface (option price is a deterministic function of
-    S only, confirmed empirically). This means we can trade them exactly like
-    the underlying: when S deviates from FV, take a max option position in the
-    direction of reversion.
-    
-    The signal (S deviation) is read from the VELVETFRUIT book each tick, not
-    from this instrument's own price. Stop-loss is triggered if the underlying
-    moves STOP_LOSS_TICKS adverse to the entry direction.
-
-    Backtest (per strike, pos_limit=300):
-      VEV_5100: +110,700  VEV_5200: +84,600  VEV_5300: +51,900
-    """
-
-    UNDERLYING: str = "VELVETFRUIT_EXTRACT"
-    FV: float = 5_250.0
-    ENTRY_THR: float = 20.0
-    STOP_LOSS_TICKS: float = 40.0
-
-    def __init__(self, symbol: str, position_limit: int) -> None:
-        super().__init__(symbol, position_limit)
-        self.entry_underlying: Optional[float] = None
-
-    def save_state(self) -> dict:
-        return {"entry_underlying": self.entry_underlying}
-
-    def load_state(self, data: dict) -> None:
-        self.entry_underlying = data.get("entry_underlying")
-
-    def run(self, state: TradingState) -> List[Order]:
-        order_depth: Optional[OrderDepth] = state.order_depths.get(self.symbol)
-        und_depth: Optional[OrderDepth] = state.order_depths.get(self.UNDERLYING)
-        if (order_depth is None or not order_depth.buy_orders or not order_depth.sell_orders
-                or und_depth is None or not und_depth.buy_orders or not und_depth.sell_orders):
-            return []
-
-        pos = self.get_position(state)
-        und_bid = max(und_depth.buy_orders.keys())
-        und_ask = min(und_depth.sell_orders.keys())
-        S = (und_bid + und_ask) / 2.0
-        dev = S - self.FV
-
-        orders: List[Order] = []
-
-        # Stop-loss: close if underlying moved STOP_LOSS_TICKS adverse to position
-        if self.entry_underlying is not None and pos != 0:
-            adverse = (self.entry_underlying - S) if pos > 0 else (S - self.entry_underlying)
-            if adverse > self.STOP_LOSS_TICKS:
-                if pos > 0:
-                    for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
-                        remaining = pos - sum(-o.quantity for o in orders)
-                        if remaining <= 0:
-                            break
-                        qty = min(order_depth.buy_orders[bid_price], remaining)
-                        if qty > 0:
-                            orders.append(Order(self.symbol, bid_price, -qty))
-                else:
-                    for ask_price in sorted(order_depth.sell_orders.keys()):
-                        remaining = -pos - sum(o.quantity for o in orders)
-                        if remaining <= 0:
-                            break
-                        qty = min(-order_depth.sell_orders[ask_price], remaining)
-                        if qty > 0:
-                            orders.append(Order(self.symbol, ask_price, qty))
-                self.entry_underlying = None
-                return orders
-
-        buys = 0
-        sells = 0
-
-        if dev < -self.ENTRY_THR and pos < self.position_limit:
-            for ask_price in sorted(order_depth.sell_orders.keys()):
-                remaining = self.position_limit - pos - buys
-                if remaining <= 0:
-                    break
-                qty = min(-order_depth.sell_orders[ask_price], remaining)
-                if qty > 0:
-                    orders.append(Order(self.symbol, ask_price, qty))
-                    buys += qty
-            if buys > 0:
-                self.entry_underlying = S
-
-        elif dev > self.ENTRY_THR and pos > -self.position_limit:
-            for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
-                remaining = self.position_limit + pos - sells
-                if remaining <= 0:
-                    break
-                qty = min(order_depth.buy_orders[bid_price], remaining)
-                if qty > 0:
-                    orders.append(Order(self.symbol, bid_price, -qty))
-                    sells += qty
-            if sells > 0:
-                self.entry_underlying = S
-
-        elif pos == 0:
-            self.entry_underlying = None
-
-        return orders
-
-
 PRODUCTS = {
     "ASH_COATED_OSMIUM": OsmiumStrategy("ASH_COATED_OSMIUM", position_limit=80),
     "INTARIAN_PEPPER_ROOT": PepperStrategy("INTARIAN_PEPPER_ROOT", position_limit=80),
     "HYDROGEL_PACK": HydrogelStrategy("HYDROGEL_PACK", position_limit=200),
     "VELVETFRUIT_EXTRACT": VelvetfruitStrategy("VELVETFRUIT_EXTRACT", position_limit=200),
-    "VEV_5100": VevOptionStrategy("VEV_5100", position_limit=300),
-    "VEV_5200": VevOptionStrategy("VEV_5200", position_limit=300),
-    "VEV_5300": VevOptionStrategy("VEV_5300", position_limit=300),
 }
 
 
