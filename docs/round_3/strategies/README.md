@@ -3,10 +3,18 @@
 One file per submission-candidate version. Each version is a snapshot:
 hypothesis, what changed, BT numbers, learnings. Numbered sequentially.
 
-## CURRENT SHIP: **v12** (`snapshots/v12_trader.py`) — LIVE $53,790 (~4x Ian)
+## R3 FINAL SUBMISSION: **v12** (`snapshots/v12_trader.py`)
 
-v15 (gate added) tested live: $46,156, **gate cost $7,634**. Gate is too
-aggressive — see `v15_gate_cap.md` for post-mortem.
+Live results (3 runs of identical code, portal is stochastic):
+- sub #1: **$53,790** (best)
+- sub #2: $13,889 (bad-luck run, 25% normal fill rate)
+- sub #3: $49,081
+- Mean ~$40k, mode ~$50k, ~4x Ian's $13.5k
+
+Other strategies tested live (all lost vs v12):
+- v15 (v12 + flow gate): $46,156 — gate cost $7.6k by blocking profitable trades
+- v16 (Rohit live-delta): $32,988 — less data → noisier deltas → mis-sized caps
+- Ian v2 (cap=300 uniform): $13,528 — bots dodge over-aggression in live
 
 ## Index
 

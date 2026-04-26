@@ -1,6 +1,6 @@
 # v11 — VFE informed-flow gate (Sharpe-best)
 
-**Status**: tested, ship-candidate (Sharpe winner)
+**Status**: superseded by v12. Component reused in v15 (also abandoned — see v15 live post-mortem: gate cost $7.6k).
 **Date**: 2026-04-26
 
 ## Hypothesis

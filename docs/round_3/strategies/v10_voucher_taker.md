@@ -1,6 +1,6 @@
 # v10 — Voucher delta-1 taker (strike-aware) (CURRENT FLOOR)
 
-**Status**: tested, ship-candidate
+**Status**: superseded by v12
 **Commit**: TBD
 **Date**: 2026-04-26
 

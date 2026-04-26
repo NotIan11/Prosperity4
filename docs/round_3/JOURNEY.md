@@ -11,12 +11,21 @@ in: defensive informed-flow handling, voucher mispricing capture, position
 caps, then ported and improved on a teammate's aggressive take-based
 strategy. **End state: 11.4× the PnL with comparable risk-adjusted metrics.**
 
-Final ship-candidate: `docs/round_3/strategies/snapshots/v10_trader.py`.
+**FINAL R3 SUBMISSION: v12** (`docs/round_3/strategies/snapshots/v12_trader.py`).
+Live result: **$53,790** on first sub, mean ~$50k across 3 reruns
+(portal has stochastic bot fills — variance ±$10k typical).
 
 ```
 v1 baseline:    31,606  PnL  Sharpe 2.50  Calmar 7.09
 v10 current:   361,705  PnL  Sharpe 8.59  Calmar 8.48
+v12 final:     460,722  PnL  Sharpe 5.20  Calmar 7.62  | LIVE $53,790
 ```
+
+R3 final summary (vs teammates' live results):
+- v12 (us):              ~$50k live (~4x Ian)
+- v15 (us, gate added):  $46k live  — gate cost $7.6k
+- v16 (Rohit live-delta): $33k live — less data → noisier deltas
+- Ian v2 (cap=300 uniform): $13.5k live — bots dodge over-aggression
 
 ## The 12-step story
 
@@ -208,12 +217,22 @@ diff is closable with `vfe_equiv_target` raised from 80 → 160.
   PnL/Calmar elbow. Could close the gap to Ian's 770k BT.
 - **v13**: add 4000/4500 with R²-discounted smaller caps.
 
-## Submission checklist
+## R3 final result
 
-1. Open `notebooks/99_trader_bt_explorer.ipynb`, set
-   `TRADER_PATH = "docs/round_3/strategies/snapshots/v10_trader.py"`,
-   run all cells. Confirm plots render.
-2. Copy contents of `docs/round_3/strategies/snapshots/v10_trader.py`.
-3. Paste into IMC portal. Submit.
-4. After live result lands, download log, drop in `data/live_logs/v10/`.
-5. Compare actual live vs estimated 26,050. Refine calibration.
+Shipped: `docs/round_3/strategies/snapshots/v12_trader.py`
+Live: $53,790 (sub #1), $13,889 (sub #2), $49,081 (sub #3)
+Mean ~$40k across 3 runs of identical code — portal bot fills are
+stochastic. See `data/live_logs/v12/` for raw logs.
+
+## R4/R5 carry-over candidates
+
+- **v11 informed-flow gate** — proven Sharpe lift in BT but cost $7.6k
+  live (gate fired against profitable trades). Better as sizing tilt
+  than binary block.
+- **v16 live-delta recompute** (Rohit's idea) — theoretically right
+  for regime shifts. Needs warm-start from prior-day deltas; current
+  implementation lost $20k due to noisy small-sample fits.
+- **Hybrid delta** — start with hardcoded, blend toward live as
+  rolling-window samples accumulate. Best of both worlds.
+- **Defensive cap reduction** — if rolling FV drifts > 50 ticks from
+  hardcoded delta point (5250), shrink caps proportionally.
