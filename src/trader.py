@@ -87,43 +87,40 @@ class OsmiumStrategy(Strategy):
                 orders.append(Order(self.symbol, bid_price, -qty))
                 sells_submitted += qty
 
-        # Ladder passive quotes: split across two levels to capture different takers
-        # Tight level (±2): catches aggressive takers who cross close to wall_mid
-        # Deep level (±5): catches takers who only cross further from mid (like our old pennying)
+        # Passive quotes: penny the best order with size > 1 inside the walls
+        buy_wall_offset = 1
+        sell_wall_offset = 1
+        if best_bid is not None and bid_wall is not None and best_bid - bid_wall > 10:
+            buy_wall_offset = max(1, (best_bid - bid_wall) // 5)
+        if best_ask is not None and ask_wall is not None and ask_wall - best_ask > 10:
+            sell_wall_offset = max(1, (ask_wall - best_ask) // 5)
+
         passive_buy_cap = self.position_limit - actual_pos - buys_submitted
         passive_sell_cap = self.position_limit + actual_pos - sells_submitted
 
-        wm = int(wall_mid)
-        tight_buy = wm - 2
-        deep_buy  = wm - 5
-        tight_ask = wm + 2
-        deep_ask  = wm + 5
+        if passive_buy_cap > 0 and bid_wall is not None:
+            buy_price = bid_wall + buy_wall_offset
+            # Penny: outbid the best-sized bid below wall_mid to jump the queue
+            for bp in sorted(order_depth.buy_orders.keys(), reverse=True):
+                if order_depth.buy_orders[bp] > 1 and bp + 1 < wall_mid:
+                    buy_price = max(buy_price, bp + 1)
+                    break
+                elif bp < wall_mid:
+                    buy_price = max(buy_price, bp)
+                    break
+            orders.append(Order(self.symbol, buy_price, passive_buy_cap))
 
-        # Clamp inside walls
-        if bid_wall is not None:
-            tight_buy = max(tight_buy, int(bid_wall) + 1)
-            deep_buy  = max(deep_buy,  int(bid_wall) + 1)
-        if ask_wall is not None:
-            tight_ask = min(tight_ask, int(ask_wall) - 1)
-            deep_ask  = min(deep_ask,  int(ask_wall) - 1)
-
-        if passive_buy_cap > 0:
-            half = passive_buy_cap // 2
-            rest = passive_buy_cap - half
-            if tight_buy != deep_buy:
-                orders.append(Order(self.symbol, tight_buy, half))
-                orders.append(Order(self.symbol, deep_buy,  rest))
-            else:
-                orders.append(Order(self.symbol, tight_buy, passive_buy_cap))
-
-        if passive_sell_cap > 0:
-            half = passive_sell_cap // 2
-            rest = passive_sell_cap - half
-            if tight_ask != deep_ask:
-                orders.append(Order(self.symbol, tight_ask, -half))
-                orders.append(Order(self.symbol, deep_ask,  -rest))
-            else:
-                orders.append(Order(self.symbol, tight_ask, -passive_sell_cap))
+        if passive_sell_cap > 0 and ask_wall is not None:
+            sell_price = ask_wall - sell_wall_offset
+            # Penny: undercut the best-sized ask above wall_mid to jump the queue
+            for sp in sorted(order_depth.sell_orders.keys()):
+                if abs(order_depth.sell_orders[sp]) > 1 and sp - 1 > wall_mid:
+                    sell_price = min(sell_price, sp - 1)
+                    break
+                elif sp > wall_mid:
+                    sell_price = min(sell_price, sp)
+                    break
+            orders.append(Order(self.symbol, sell_price, -passive_sell_cap))
 
         return orders
 
@@ -181,19 +178,6 @@ class Trader:
             if symbol in state.order_depths:
                 orders[symbol] = strategy.run(state)
 
-        state_out = {s: strat.save_state() for s, strat in PRODUCTS.items()}
-
-        # Log observations on first tick so we can inspect them in the portal
-        if state.timestamp == 0:
-            try:
-                obs = {
-                    "plain": dict(state.observations.plainValueObservations),
-                    "conversion": {k: vars(v) for k, v in state.observations.conversionObservations.items()},
-                }
-                state_out["_obs"] = obs
-            except Exception:
-                pass
-
-        trader_data = json.dumps(state_out)
+        trader_data = json.dumps({s: strat.save_state() for s, strat in PRODUCTS.items()})
 
         return orders, 0, trader_data

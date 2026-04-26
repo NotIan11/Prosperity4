@@ -3,8 +3,9 @@ __pycache__/
 *.pyc
 *.pyo
 .DS_Store
-backtests/*.log
-backtests/*.json
+.vscode/
+backtests/
+submissions/
 *.egg-info/
 dist/
 build/
