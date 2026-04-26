@@ -1,13 +1,21 @@
+# Python
 .venv/
 __pycache__/
 *.pyc
 *.pyo
-.DS_Store
+.ipynb_checkpoints/
+
+# IDE / OS
 .vscode/
-backtests/
-submissions/
+.idea/
+.DS_Store
+
+# Build
 *.egg-info/
 dist/
 build/
-.ipynb_checkpoints/
+
+# Local-only (results, archives, scratch)
+backtests/
+submissions/
 *.zip
