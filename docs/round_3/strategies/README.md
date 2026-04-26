@@ -3,9 +3,14 @@
 One file per submission-candidate version. Each version is a snapshot:
 hypothesis, what changed, BT numbers, learnings. Numbered sequentially.
 
+## CURRENT SHIP: **v12** (`snapshots/v12_trader.py`) — LIVE $53,790 (~4x Ian)
+
+v15 (gate added) tested live: $46,156, **gate cost $7,634**. Gate is too
+aggressive — see `v15_gate_cap.md` for post-mortem.
+
 ## Index
 
-| Version | Status | Total PnL (3-day BT) | Sharpe | Max DD | Live est | Notes |
+| Version | Status | Total PnL (3-day BT) | Sharpe | Max DD | Live actual / est | Notes |
 |---------|--------|----------------------|--------|--------|----------|-------|
 | [v1_baseline](v1_baseline.md) | baseline | 31,606 | 2.50 | 4,459 (1.25%) | — | HG h=8 sym + VFE h=2 sym |
 | [v2_vfe_asymmetric](v2_vfe_asymmetric.md) | tested | 33,676 (+6.5%) | 2.46 | 4,264 (1.20%) | — | + VFE bid=2/ask=3 |
@@ -17,10 +22,10 @@ hypothesis, what changed, BT numbers, learnings. Numbered sequentially.
 | [v8_hg_takemaker](v8_hg_takemaker.md) | superseded | 119,578 (+278%) | 2.35 | 19,696 (9.91%) | ~6,682 (est) | + Ian's HG take+derisk |
 | [v9_vfe_mr_taker](v9_vfe_mr_taker.md) | superseded | 188,449 (+496%) | 6.86 | 22,460 (21.10%) | ~12,451 (est) | + VFE MR taker w/ rolling FV |
 | [v10_voucher_taker](v10_voucher_taker.md) | superseded | 361,705 (+1045%) | 8.59 | 42,668 (20.11%) | ~26,050 (est) | + voucher taker w/ strike-aware delta |
-| **[v11_flow_gate](v11_flow_gate.md)** | **SHIP (Sharpe-best)** | **360,407 (+1040%)** | **9.29** | **42,668 (20.11%)** | **~26,050 (est)** | + VFE informed-flow gate (free Sharpe lift) |
-| **[v12_cap_160](v12_cap_160.md)** | **SHIP (PnL-best)** | **460,722 (+1358%)** | **5.20** | **60,493 (20.11%)** | **~33,659 (est)** | v10 + voucher cap target 80→160 |
+| [v11_flow_gate](v11_flow_gate.md) | superseded | 360,407 (+1040%) | 9.29 | 42,668 (20.11%) | ~26,050 (est) | + VFE informed-flow gate |
+| **[v12_cap_160](v12_cap_160.md)** | **SHIP — best live** | **460,722 (+1358%)** | **5.20** | **60,493 (20.11%)** | **53,790 LIVE ✓** | v10 + voucher cap target 80→160 |
 | [v13_cap_240](v13_cap_240.md) | abandoned | 479,276 (+1417%) | (lower) | (higher) | ~33,985 (est) | v12 + cap→240 (past elbow, +4% PnL only) |
-| [v15_gate_cap](v15_gate_cap.md) | tested, marginal | 458,648 (+1351%) | 5.50 | 60,493 (20.11%) | ~33,659 (est) | v11+v12 stacked (gate doesn't fire in portal slice) |
+| [v15_gate_cap](v15_gate_cap.md) | abandoned | 458,648 (+1351%) | 5.50 | 60,493 (20.11%) | **46,156 LIVE** (-$7.6k vs v12) | v11+v12; gate kills profitable trades live |
 
 `Live est` = `BT day-2 first-1000-tick PnL / 1.37` (calibration factor from v4
 actual; see `docs/round_3/research/14_bt_vs_live_calibration.md`).
