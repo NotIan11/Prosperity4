@@ -16,7 +16,11 @@ hypothesis, what changed, BT numbers, learnings. Numbered sequentially.
 | [v7_hg_inventory_cap](v7_hg_inventory_cap.md) | superseded | 34,518 (+9.2%) | 2.97 | 3,918 (0.86%) | ~1,225 (est) | + HG soft cap=40 (Calmar-optimal) |
 | [v8_hg_takemaker](v8_hg_takemaker.md) | superseded | 119,578 (+278%) | 2.35 | 19,696 (9.91%) | ~6,682 (est) | + Ian's HG take+derisk |
 | [v9_vfe_mr_taker](v9_vfe_mr_taker.md) | superseded | 188,449 (+496%) | 6.86 | 22,460 (21.10%) | ~12,451 (est) | + VFE MR taker w/ rolling FV |
-| **[v10_voucher_taker](v10_voucher_taker.md)** | **ship-candidate** | **361,705 (+1045%)** | **8.59** | **42,668 (20.11%)** | **~26,050 (est)** | + voucher taker w/ strike-aware delta (Pareto-best) |
+| [v10_voucher_taker](v10_voucher_taker.md) | superseded | 361,705 (+1045%) | 8.59 | 42,668 (20.11%) | ~26,050 (est) | + voucher taker w/ strike-aware delta |
+| **[v11_flow_gate](v11_flow_gate.md)** | **SHIP (Sharpe-best)** | **360,407 (+1040%)** | **9.29** | **42,668 (20.11%)** | **~26,050 (est)** | + VFE informed-flow gate (free Sharpe lift) |
+| **[v12_cap_160](v12_cap_160.md)** | **SHIP (PnL-best)** | **460,722 (+1358%)** | **5.20** | **60,493 (20.11%)** | **~33,659 (est)** | v10 + voucher cap target 80→160 |
+| [v13_cap_240](v13_cap_240.md) | abandoned | 479,276 (+1417%) | (lower) | (higher) | ~33,985 (est) | v12 + cap→240 (past elbow, +4% PnL only) |
+| [v15_gate_cap](v15_gate_cap.md) | tested, marginal | 458,648 (+1351%) | 5.50 | 60,493 (20.11%) | ~33,659 (est) | v11+v12 stacked (gate doesn't fire in portal slice) |
 
 `Live est` = `BT day-2 first-1000-tick PnL / 1.37` (calibration factor from v4
 actual; see `docs/round_3/research/14_bt_vs_live_calibration.md`).
