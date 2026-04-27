@@ -1,4 +1,3 @@
-from collections import deque
 import json
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Tuple
@@ -9,27 +8,6 @@ try:
 except ImportError:
     # For local development
     from src.datamodel import Order, OrderDepth, TradingState  # type: ignore
-
-
-VOUCHER_SYMBOLS: Tuple[str, ...] = (
-    "VEV_5000",
-    "VEV_5100",
-    "VEV_5200",
-    "VEV_5300",
-)
-VOUCHER_HARD_LIMIT = 300
-VFE_EQUIV_TARGET = 160
-VOUCHER_DELTA_PRIOR: Dict[str, float] = {
-    "VEV_5000": 0.654,
-    "VEV_5100": 0.577,
-    "VEV_5200": 0.437,
-    "VEV_5300": 0.273,
-}
-
-
-def voucher_cap_for(symbol: str) -> int:
-    delta = VOUCHER_DELTA_PRIOR[symbol]
-    return min(int(round(VFE_EQUIV_TARGET / delta)), VOUCHER_HARD_LIMIT)
 
 
 class Strategy(ABC):
@@ -387,10 +365,8 @@ class VelvetfruitStrategy(Strategy):
     beyond the entry price, guarding against a wrong-FV scenario.
     """
 
+    FV: float = 5_250.0
     ENTRY_THR: float = 20.0
-    FAIR_EXIT_THR: float = 5.0
-    FV_WINDOW: int = 1000
-    FV_WARMUP_FALLBACK: float = 5_250.0
     # VELVETFRUIT std ≈ 15 ticks. Entry at 20 ticks (~1.3σ from FV).
     # Stop at 40 ticks beyond entry means total 60 ticks from FV (~4σ) — very extreme.
     STOP_LOSS_TICKS: float = 40.0
@@ -398,26 +374,12 @@ class VelvetfruitStrategy(Strategy):
     def __init__(self, symbol: str, position_limit: int) -> None:
         super().__init__(symbol, position_limit)
         self.entry_price: Optional[float] = None
-        self.mid_history: deque[float] = deque(maxlen=self.FV_WINDOW)
 
     def save_state(self) -> dict:
-        return {
-            "entry_price": self.entry_price,
-            "mid_history": list(self.mid_history),
-        }
+        return {"entry_price": self.entry_price}
 
     def load_state(self, data: dict) -> None:
         self.entry_price = data.get("entry_price")
-        self.mid_history = deque(data.get("mid_history", []), maxlen=self.FV_WINDOW)
-
-    def _rolling_fv(self) -> float:
-        if len(self.mid_history) < 100:
-            return self.FV_WARMUP_FALLBACK
-        sorted_mids = sorted(self.mid_history)
-        n = len(sorted_mids)
-        if n % 2:
-            return sorted_mids[n // 2]
-        return (sorted_mids[n // 2 - 1] + sorted_mids[n // 2]) / 2.0
 
     def run(self, state: TradingState) -> List[Order]:
         order_depth: Optional[OrderDepth] = state.order_depths.get(self.symbol)
@@ -428,9 +390,7 @@ class VelvetfruitStrategy(Strategy):
         best_bid = max(order_depth.buy_orders.keys())
         best_ask = min(order_depth.sell_orders.keys())
         mid = (best_bid + best_ask) / 2.0
-        self.mid_history.append(mid)
-        fv = self._rolling_fv()
-        dev = mid - fv
+        dev = mid - self.FV
 
         orders: List[Order] = []
 
@@ -457,7 +417,7 @@ class VelvetfruitStrategy(Strategy):
                 self.entry_price = None
                 return orders
 
-        if abs(dev) < self.FAIR_EXIT_THR and pos != 0:
+        if abs(dev) < 5 and pos != 0:
             if pos > 0:
                 for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
                     remaining = pos - sum(-o.quantity for o in orders)
@@ -481,7 +441,7 @@ class VelvetfruitStrategy(Strategy):
         sells = 0
 
         if dev < -self.ENTRY_THR and pos < self.position_limit:
-            target_fraction = min(1.0, (abs(dev) - self.ENTRY_THR) / 10.0 + 0.5)
+            target_fraction = min(1.0, (abs(dev) - self.ENTRY_THR) / 10 + 0.5)
             target_position = int(self.position_limit * target_fraction)
             for ask_price in sorted(order_depth.sell_orders.keys()):
                 remaining = target_position - pos - buys
@@ -495,7 +455,7 @@ class VelvetfruitStrategy(Strategy):
                 self.entry_price = mid
 
         elif dev > self.ENTRY_THR and pos > -self.position_limit:
-            target_fraction = min(1.0, (abs(dev) - self.ENTRY_THR) / 10.0 + 0.5)
+            target_fraction = min(1.0, (abs(dev) - self.ENTRY_THR) / 10 + 0.5)
             target_position = int(self.position_limit * target_fraction)
             for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
                 remaining = target_position + pos - sells
@@ -516,42 +476,33 @@ class VelvetfruitStrategy(Strategy):
 
 class VevOptionStrategy(Strategy):
     """
-    Voucher taker using VELVETFRUIT_EXTRACT as the main signal.
+    Options overlay using the VELVETFRUIT_EXTRACT price as the signal.
 
-    We still trigger entries off VELVETFRUIT deviation from rolling fair value,
-    but keep strike-aware caps so each traded voucher has roughly comparable
-    VELVETFRUIT-equivalent exposure.
+    VEV_XXXX are European call options on VELVETFRUIT_EXTRACT priced by the
+    BOT via a no-theta BS surface (option price is a deterministic function of
+    S only, confirmed empirically). This means we can trade them exactly like
+    the underlying: when S deviates from FV, take a max option position in the
+    direction of reversion.
+
+    The signal (S deviation) is read from the VELVETFRUIT book each tick, not
+    from this instrument's own price. Stop-loss is triggered if the underlying
+    moves STOP_LOSS_TICKS adverse to the entry direction.
     """
 
     UNDERLYING: str = "VELVETFRUIT_EXTRACT"
+    FV: float = 5_250.0
     ENTRY_THR: float = 20.0
     STOP_LOSS_TICKS: float = 40.0
-    FV_WINDOW: int = 1000
-    FV_WARMUP_FALLBACK: float = 5_250.0
 
     def __init__(self, symbol: str, position_limit: int) -> None:
         super().__init__(symbol, position_limit)
         self.entry_underlying: Optional[float] = None
-        self.underlying_history: deque[float] = deque(maxlen=self.FV_WINDOW)
 
     def save_state(self) -> dict:
-        return {
-            "entry_underlying": self.entry_underlying,
-            "underlying_history": list(self.underlying_history),
-        }
+        return {"entry_underlying": self.entry_underlying}
 
     def load_state(self, data: dict) -> None:
         self.entry_underlying = data.get("entry_underlying")
-        self.underlying_history = deque(data.get("underlying_history", []), maxlen=self.FV_WINDOW)
-
-    def _rolling_fv(self) -> float:
-        if len(self.underlying_history) < 100:
-            return self.FV_WARMUP_FALLBACK
-        sorted_mids = sorted(self.underlying_history)
-        n = len(sorted_mids)
-        if n % 2:
-            return sorted_mids[n // 2]
-        return (sorted_mids[n // 2 - 1] + sorted_mids[n // 2]) / 2.0
 
     def run(self, state: TradingState) -> List[Order]:
         order_depth: Optional[OrderDepth] = state.order_depths.get(self.symbol)
@@ -570,10 +521,7 @@ class VevOptionStrategy(Strategy):
         und_bid = max(und_depth.buy_orders.keys())
         und_ask = min(und_depth.sell_orders.keys())
         S = (und_bid + und_ask) / 2.0
-        self.underlying_history.append(S)
-        fv = self._rolling_fv()
-        dev = S - fv
-        effective_limit = self.position_limit
+        dev = S - self.FV
 
         orders: List[Order] = []
 
@@ -600,12 +548,34 @@ class VevOptionStrategy(Strategy):
                 self.entry_underlying = None
                 return orders
 
+        if abs(dev) < 5 and pos != 0:
+            if pos > 0:
+                for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
+                    remaining = pos - sum(-o.quantity for o in orders)
+                    if remaining <= 0:
+                        break
+                    qty = min(order_depth.buy_orders[bid_price], remaining)
+                    if qty > 0:
+                        orders.append(Order(self.symbol, bid_price, -qty))
+            else:
+                for ask_price in sorted(order_depth.sell_orders.keys()):
+                    remaining = -pos - sum(o.quantity for o in orders)
+                    if remaining <= 0:
+                        break
+                    qty = min(-order_depth.sell_orders[ask_price], remaining)
+                    if qty > 0:
+                        orders.append(Order(self.symbol, ask_price, qty))
+            self.entry_underlying = None
+            return orders
+
         buys = 0
         sells = 0
 
-        if dev < -self.ENTRY_THR and pos < effective_limit:
+        if dev < -self.ENTRY_THR and pos < self.position_limit:
+            target_fraction = min(1.0, (abs(dev) - self.ENTRY_THR) / 10 + 0.5)
+            target_position = int(self.position_limit * target_fraction)
             for ask_price in sorted(order_depth.sell_orders.keys()):
-                remaining = effective_limit - pos - buys
+                remaining = target_position - pos - buys
                 if remaining <= 0:
                     break
                 qty = min(-order_depth.sell_orders[ask_price], remaining)
@@ -615,9 +585,11 @@ class VevOptionStrategy(Strategy):
             if buys > 0:
                 self.entry_underlying = S
 
-        elif dev > self.ENTRY_THR and pos > -effective_limit:
+        elif dev > self.ENTRY_THR and pos > -self.position_limit:
+            target_fraction = min(1.0, (abs(dev) - self.ENTRY_THR) / 10 + 0.5)
+            target_position = int(self.position_limit * target_fraction)
             for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
-                remaining = effective_limit + pos - sells
+                remaining = target_position + pos - sells
                 if remaining <= 0:
                     break
                 qty = min(order_depth.buy_orders[bid_price], remaining)
@@ -633,15 +605,19 @@ class VevOptionStrategy(Strategy):
         return orders
 
 
-PRODUCTS: Dict[str, Strategy] = {
+PRODUCTS = {
     "ASH_COATED_OSMIUM": OsmiumStrategy("ASH_COATED_OSMIUM", position_limit=80),
     "INTARIAN_PEPPER_ROOT": PepperStrategy("INTARIAN_PEPPER_ROOT", position_limit=80),
     "HYDROGEL_PACK": HydrogelStrategy("HYDROGEL_PACK", position_limit=200),
     "VELVETFRUIT_EXTRACT": VelvetfruitStrategy("VELVETFRUIT_EXTRACT", position_limit=200),
-    "VEV_5000": VevOptionStrategy("VEV_5000", position_limit=voucher_cap_for("VEV_5000")),
-    "VEV_5100": VevOptionStrategy("VEV_5100", position_limit=voucher_cap_for("VEV_5100")),
-    "VEV_5200": VevOptionStrategy("VEV_5200", position_limit=voucher_cap_for("VEV_5200")),
-    "VEV_5300": VevOptionStrategy("VEV_5300", position_limit=voucher_cap_for("VEV_5300")),
+    "VEV_4000": VevOptionStrategy("VEV_4000", position_limit=300),
+    "VEV_4500": VevOptionStrategy("VEV_4500", position_limit=300),
+    "VEV_5000": VevOptionStrategy("VEV_5000", position_limit=300),
+    "VEV_5100": VevOptionStrategy("VEV_5100", position_limit=300),
+    "VEV_5200": VevOptionStrategy("VEV_5200", position_limit=300),
+    "VEV_5300": VevOptionStrategy("VEV_5300", position_limit=300),
+    "VEV_5400": VevOptionStrategy("VEV_5400", position_limit=300),
+    "VEV_5500": VevOptionStrategy("VEV_5500", position_limit=300),
 }
 
 
@@ -673,12 +649,12 @@ class Trader:
         for symbol, strategy in PRODUCTS.items():
             if symbol in saved:
                 strategy.load_state(saved[symbol])
-
         orders: Dict[str, List[Order]] = {}
         for symbol, strategy in PRODUCTS.items():
             if symbol in state.order_depths:
                 orders[symbol] = strategy.run(state)
 
-        trader_data = json.dumps({s: strat.save_state() for s, strat in PRODUCTS.items()})
+        state_dict = {s: strat.save_state() for s, strat in PRODUCTS.items()}
+        trader_data = json.dumps(state_dict)
 
         return orders, 0, trader_data

@@ -1,0 +1,30 @@
+{
+  "dataset_id": "prices_round_3_day_1",
+  "dataset_path": "/Users/iankim/Desktop/Programming/prosperity_rust_backtester/datasets/round3/prices_round_3_day_1.csv",
+  "day": 1,
+  "final_pnl_by_product": {
+    "HYDROGEL_PACK": 21504.0,
+    "VELVETFRUIT_EXTRACT": 25415.0,
+    "VEV_4000": -17171.5,
+    "VEV_4500": 1799.5,
+    "VEV_5000": 33761.5,
+    "VEV_5100": 33642.5,
+    "VEV_5200": 26287.5,
+    "VEV_5300": 15786.0,
+    "VEV_5400": 6115.0,
+    "VEV_5500": 1612.5,
+    "VEV_6000": 0.0,
+    "VEV_6500": 0.0
+  },
+  "final_pnl_total": 148752.0,
+  "generated_at": "2026-04-26T09:17:21+00:00",
+  "matching": {
+    "price_slippage_bps": 0.0,
+    "queue_penetration": 1.0,
+    "trade_match_mode": "all"
+  },
+  "own_trade_count": 3154,
+  "run_id": "backtest-1777195041022-round3-day+1",
+  "tick_count": 10000,
+  "trader_path": "src/rohitTrader.py"
+}
