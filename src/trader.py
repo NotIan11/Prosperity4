@@ -90,6 +90,217 @@ def implied_tte_days(price: float, S: float, K: float, sigma: float) -> Optional
 
 
 
+class DirectionalStrategy(Strategy):
+    """Hold max long (+1) or max short (-1) by sweeping available book levels."""
+
+    def __init__(self, symbol: str, position_limit: int, direction: int) -> None:
+        super().__init__(symbol, position_limit)
+        self.direction = direction  # +1 = long, -1 = short
+
+    def run(self, state: TradingState) -> List[Order]:
+        order_depth = state.order_depths.get(self.symbol)
+        if order_depth is None or not order_depth.buy_orders or not order_depth.sell_orders:
+            return []
+
+        pos = self.get_position(state)
+        target = self.direction * self.position_limit
+        remaining = target - pos  # positive = need to buy, negative = need to sell
+
+        if remaining == 0:
+            return []
+
+        orders: List[Order] = []
+        if remaining > 0:
+            for ask_price in sorted(order_depth.sell_orders.keys()):
+                qty = min(remaining, -order_depth.sell_orders[ask_price])
+                if qty > 0:
+                    orders.append(Order(self.symbol, ask_price, qty))
+                    remaining -= qty
+                if remaining <= 0:
+                    break
+        else:
+            for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
+                qty = min(-remaining, order_depth.buy_orders[bid_price])
+                if qty > 0:
+                    orders.append(Order(self.symbol, bid_price, -qty))
+                    remaining += qty
+                if remaining >= 0:
+                    break
+
+        return orders
+
+
+class EMAMarketMaker(Strategy):
+    """EMA-anchored market maker: quote inside the spread, skew by inventory,
+    take aggressively when price deviates beyond take_edge from fair value."""
+
+    def __init__(
+        self,
+        symbol: str,
+        position_limit: int,
+        ema_alpha: float = 0.02,
+        take_edge: float = 80.0,
+        max_take: int = 10,
+        skew_per_lot: float = 0.1,
+    ) -> None:
+        super().__init__(symbol, position_limit)
+        self.ema_alpha = ema_alpha
+        self.take_edge = take_edge
+        self.max_take = max_take
+        self.skew_per_lot = skew_per_lot
+        self.ema_mid: Optional[float] = None
+
+    def save_state(self) -> dict:
+        return {"ema_mid": self.ema_mid}
+
+    def load_state(self, data: dict) -> None:
+        self.ema_mid = data.get("ema_mid")
+
+    def run(self, state: TradingState) -> List[Order]:
+        order_depth = state.order_depths.get(self.symbol)
+        if order_depth is None or not order_depth.buy_orders or not order_depth.sell_orders:
+            return []
+
+        pos = self.get_position(state)
+        best_bid = max(order_depth.buy_orders.keys())
+        best_ask = min(order_depth.sell_orders.keys())
+        mid = (best_bid + best_ask) / 2.0
+
+        self.ema_mid = mid if self.ema_mid is None else (
+            (1.0 - self.ema_alpha) * self.ema_mid + self.ema_alpha * mid
+        )
+        ema = self.ema_mid
+
+        orders: List[Order] = []
+        bought = 0
+        sold = 0
+
+        # Aggressive takes on large deviations from EMA
+        for ask_price in sorted(order_depth.sell_orders.keys()):
+            if ask_price >= ema - self.take_edge:
+                break
+            cap = min(self.position_limit - pos - bought, self.max_take - bought)
+            if cap <= 0:
+                break
+            qty = min(-order_depth.sell_orders[ask_price], cap)
+            if qty > 0:
+                orders.append(Order(self.symbol, ask_price, qty))
+                bought += qty
+
+        for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
+            if bid_price <= ema + self.take_edge:
+                break
+            cap = min(self.position_limit + pos - sold, self.max_take - sold)
+            if cap <= 0:
+                break
+            qty = min(order_depth.buy_orders[bid_price], cap)
+            if qty > 0:
+                orders.append(Order(self.symbol, bid_price, -qty))
+                sold += qty
+
+        # Passive quoting inside the spread, skewed by inventory
+        eff_pos = pos + bought - sold
+        skew = round(-eff_pos * self.skew_per_lot)
+
+        buy_price = best_bid + 1 + skew
+        sell_price = best_ask - 1 + skew
+
+        # Keep quotes on correct sides of mid
+        buy_price = min(buy_price, int(mid) - 1)
+        sell_price = max(sell_price, int(mid) + 1)
+
+        buy_cap = self.position_limit - pos - bought
+        sell_cap = self.position_limit + pos - sold
+
+        if buy_cap > 0 and buy_price > 0:
+            orders.append(Order(self.symbol, buy_price, buy_cap))
+        if sell_cap > 0 and sell_price > buy_price:
+            orders.append(Order(self.symbol, sell_price, -sell_cap))
+
+        return orders
+
+
+class PairTradingStrategy(Strategy):
+    """Mean-revert spread of a cointegrated pair, hedged across both legs.
+
+    leg1 + leg2 ≈ basket_constant; trade leg1 - leg2 against its mean.
+    Returns a dict of orders for both legs (handled by Trader.run dispatch).
+    """
+
+    def __init__(
+        self,
+        leg1: str,
+        leg2: str,
+        position_limit: int,
+        spread_mean: float,
+        entry_thr: float = 400.0,
+        exit_thr: float = 100.0,
+    ) -> None:
+        super().__init__(leg1, position_limit)
+        self.leg1 = leg1
+        self.leg2 = leg2
+        self.spread_mean = spread_mean
+        self.entry_thr = entry_thr
+        self.exit_thr = exit_thr
+
+    @staticmethod
+    def _sweep(symbol: str, depth: OrderDepth, pos: int, target: int) -> List[Order]:
+        remaining = target - pos
+        if remaining == 0:
+            return []
+        orders: List[Order] = []
+        if remaining > 0:
+            for ask in sorted(depth.sell_orders.keys()):
+                qty = min(remaining, -depth.sell_orders[ask])
+                if qty > 0:
+                    orders.append(Order(symbol, ask, qty))
+                    remaining -= qty
+                if remaining <= 0:
+                    break
+        else:
+            for bid in sorted(depth.buy_orders.keys(), reverse=True):
+                qty = min(-remaining, depth.buy_orders[bid])
+                if qty > 0:
+                    orders.append(Order(symbol, bid, -qty))
+                    remaining += qty
+                if remaining >= 0:
+                    break
+        return orders
+
+    def run(self, state: TradingState):
+        d1 = state.order_depths.get(self.leg1)
+        d2 = state.order_depths.get(self.leg2)
+        if (d1 is None or d2 is None or
+                not d1.buy_orders or not d1.sell_orders or
+                not d2.buy_orders or not d2.sell_orders):
+            return {}
+
+        mid1 = (max(d1.buy_orders) + min(d1.sell_orders)) / 2.0
+        mid2 = (max(d2.buy_orders) + min(d2.sell_orders)) / 2.0
+        dev = (mid1 - mid2) - self.spread_mean
+
+        pos1 = state.position.get(self.leg1, 0)
+        pos2 = state.position.get(self.leg2, 0)
+
+        if dev > self.entry_thr:
+            target1, target2 = -self.position_limit, +self.position_limit
+        elif dev < -self.entry_thr:
+            target1, target2 = +self.position_limit, -self.position_limit
+        elif abs(dev) < self.exit_thr:
+            target1, target2 = 0, 0
+        else:
+            return {}
+
+        result: Dict[str, List[Order]] = {}
+        o1 = self._sweep(self.leg1, d1, pos1, target1)
+        o2 = self._sweep(self.leg2, d2, pos2, target2)
+        if o1:
+            result[self.leg1] = o1
+        if o2:
+            result[self.leg2] = o2
+        return result
+
+
 class OsmiumStrategy(Strategy):
     FAIR_VALUE: float = 10_000.0
     MR_TAKE_THR = 2.5
@@ -715,38 +926,37 @@ class VevOptionStrategy(Strategy):
 
 
 PRODUCTS = {
-    "ASH_COATED_OSMIUM": OsmiumStrategy("ASH_COATED_OSMIUM", position_limit=80),
-    "INTARIAN_PEPPER_ROOT": PepperStrategy("INTARIAN_PEPPER_ROOT", position_limit=80),
-    "HYDROGEL_PACK": HydrogelStrategy("HYDROGEL_PACK", position_limit=200),
-    "VELVETFRUIT_EXTRACT": VelvetfruitStrategy("VELVETFRUIT_EXTRACT", position_limit=200),
-    "VEV_4000": VevOptionStrategy("VEV_4000", position_limit=300),
-    "VEV_4500": VevOptionStrategy("VEV_4500", position_limit=300),
-    "VEV_5000": VevOptionStrategy("VEV_5000", position_limit=300),
-    "VEV_5100": VevOptionStrategy("VEV_5100", position_limit=300),
-    "VEV_5200": VevOptionStrategy("VEV_5200", position_limit=300),
-    "VEV_5300": VevOptionStrategy("VEV_5300", position_limit=300),
-    "VEV_5400": VevOptionStrategy("VEV_5400", position_limit=300),
-    "VEV_5500": VevOptionStrategy("VEV_5500", position_limit=300),
+    # Round 5 — position limit 10 for all products
+
+    # Market making
+    "SNACKPACK_RASPBERRY":      EMAMarketMaker("SNACKPACK_RASPBERRY",      10, ema_alpha=0.01, take_edge=100),
+    "SNACKPACK_PISTACHIO":      EMAMarketMaker("SNACKPACK_PISTACHIO",      10, ema_alpha=0.01, take_edge=100),
+    "TRANSLATOR_GRAPHITE_MIST": EMAMarketMaker("TRANSLATOR_GRAPHITE_MIST", 10, ema_alpha=0.005, take_edge=200),
+
+    # Pair trading — CHOCOLATE/VANILLA cointegrated, sum locked at ~19,941 (σ=76)
+    # Keyed under CHOCOLATE so dispatch fires when the leg is present; emits orders for both legs.
+    "SNACKPACK_CHOCOLATE": PairTradingStrategy(
+        "SNACKPACK_CHOCOLATE", "SNACKPACK_VANILLA",
+        position_limit=10, spread_mean=-254.0, entry_thr=500.0, exit_thr=0.0,
+    ),
+
+    # Directional — short
+    "PEBBLES_XS":      DirectionalStrategy("PEBBLES_XS",      10, direction=-1),
+    "MICROCHIP_OVAL":  DirectionalStrategy("MICROCHIP_OVAL",  10, direction=-1),
+    "UV_VISOR_AMBER":  DirectionalStrategy("UV_VISOR_AMBER",  10, direction=-1),
+    "UV_VISOR_ORANGE": DirectionalStrategy("UV_VISOR_ORANGE", 10, direction=-1),
+
+    # Directional — long
+    "PEBBLES_XL":          DirectionalStrategy("PEBBLES_XL",          10, direction=+1),
+    "MICROCHIP_SQUARE":    DirectionalStrategy("MICROCHIP_SQUARE",    10, direction=+1),
+    "OXYGEN_SHAKE_GARLIC": DirectionalStrategy("OXYGEN_SHAKE_GARLIC", 10, direction=+1),
+    "SLEEP_POD_POLYESTER": DirectionalStrategy("SLEEP_POD_POLYESTER", 10, direction=+1),
+    "UV_VISOR_MAGENTA":    DirectionalStrategy("UV_VISOR_MAGENTA",    10, direction=+1),
+    "UV_VISOR_RED":        DirectionalStrategy("UV_VISOR_RED",        10, direction=+1),
 }
 
 
 class Trader:
-    def bid(self) -> int:
-        # GTO Market Access Fee bid.
-        #
-        # Final simulation is 1 day, so V = incremental value for one day of extra access.
-        # Extra access = 25% more quotes (testing uses 80%; full access = 100%).
-        # Incremental value per day:
-        #   - Osmium:  ~19,773/day × 0.25 ≈ 4,943  (fills scale linearly with flow)
-        #   - Pepper:  ~79,262/day × 0.05 ≈ 3,963  (conservative; mostly position-limited)
-        #   - Total V  ≈ 8,906 per day
-        #
-        # Mechanism: top 50% of bids win + pay their bid. Only need to beat the median.
-        # Nash equilibrium (uniform bids on [0,V]): bid V/2 ≈ 4,453.
-        # Bidding slightly above GTO (~V*0.56) to protect against a low-skewed distribution.
-        # Bidding above V is dominated (pay more than you gain).
-        return 4750
-
     def run(self, state: TradingState) -> Tuple[Dict[str, List[Order]], int, str]:
         saved = {}
         if state.traderData:
@@ -758,12 +968,17 @@ class Trader:
         for symbol, strategy in PRODUCTS.items():
             if symbol in saved:
                 strategy.load_state(saved[symbol])
+
         orders: Dict[str, List[Order]] = {}
         for symbol, strategy in PRODUCTS.items():
-            if symbol in state.order_depths:
-                orders[symbol] = strategy.run(state)
+            if symbol not in state.order_depths:
+                continue
+            result = strategy.run(state)
+            if isinstance(result, dict):
+                for sym, ords in result.items():
+                    orders.setdefault(sym, []).extend(ords)
+            else:
+                orders.setdefault(symbol, []).extend(result)
 
         state_dict = {s: strat.save_state() for s, strat in PRODUCTS.items()}
-        trader_data = json.dumps(state_dict)
-
-        return orders, 0, trader_data
+        return orders, 0, json.dumps(state_dict)

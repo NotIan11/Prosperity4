@@ -56,6 +56,10 @@ DATASET="${RUST_BT_DATA}/round${ROUND}"
 if [ "$ROUND" = "tutorial" ]; then
     DATASET="${RUST_BT_DATA}/tutorial"
 fi
+# Fall back to local data/ directory if the bundled dataset doesn't exist
+if [ ! -d "$DATASET" ] && [ -d "$ROOT/data/round${ROUND}" ]; then
+    DATASET="$ROOT/data/round${ROUND}"
+fi
 
 CMD=("$RUST_BT" --trader "$TRADER" --dataset "$DATASET")
 
