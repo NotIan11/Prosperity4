@@ -200,10 +200,12 @@ class HydrogelStrategy(Strategy):
       - Mark 38: sole aggressive taker, ~190 crosses/day each side, avg spread ~15.7 ticks
       - Spread always >= 7 ticks
 
-    Layer 1 — EMA mean-reversion takes (backtester-visible):
-      Buy aggressively when ask < ema - TAKE_EDGE (price genuinely below fair).
-      Sell aggressively when bid > ema + TAKE_EDGE (price genuinely above fair).
+    Layer 1 — Fixed-FV mean-reversion takes (backtester-visible):
+      Buy aggressively when ask < FV - TAKE_EDGE (price genuinely below fair).
+      Sell aggressively when bid > FV + TAKE_EDGE (price genuinely above fair).
       Capped at ±ER_CAP to always reserve headroom for Layer 2.
+      Uses fixed FV=10000 (empirically stable across all days) rather than EMA,
+      which tracks trends too closely and suppresses signal on low-volatility days.
 
     Layer 2 — Mark 38 intercept (live only; backtester cannot model re-routing):
       When Mark 38 was buying last tick → post passive sell at best_ask-1.
@@ -218,12 +220,12 @@ class HydrogelStrategy(Strategy):
       yet, giving us one tick of queue priority over the reactive Layer 2.
     """
 
-    # EMA
-    EMA_ALPHA: float = 0.005   # ~140-tick half-life; slower anchors FV better for MR
+    # Fixed fair value (stable structural price confirmed across all round 4 days)
+    FV: float = 10_000.0
 
     # Layer 1 parameters
-    TAKE_EDGE: float = 20.0    # min overshot from EMA to take aggressively
-    MAX_TAKE: int = 5          # max units per aggressive-take tick
+    TAKE_EDGE: float = 8.0    # min overshot from FV to take aggressively
+    MAX_TAKE: int = 20         # max units per aggressive-take tick
     ER_CAP: int = 150          # position hard cap for Layer 1; keeps 50 free for Layer 2
 
     # Layer 2 parameters
@@ -236,13 +238,12 @@ class HydrogelStrategy(Strategy):
 
     def __init__(self, symbol: str, position_limit: int) -> None:
         super().__init__(symbol, position_limit)
-        self.ema_mid: Optional[float] = None
 
     def save_state(self) -> dict:
-        return {"ema_mid": self.ema_mid}
+        return {}
 
     def load_state(self, data: dict) -> None:
-        self.ema_mid = data.get("ema_mid")
+        pass
 
     def run(self, state: TradingState) -> List[Order]:
         order_depth: Optional[OrderDepth] = state.order_depths.get(self.symbol)
@@ -254,19 +255,14 @@ class HydrogelStrategy(Strategy):
         best_ask = min(order_depth.sell_orders.keys())
         mid = (best_bid + best_ask) / 2.0
 
-        self.ema_mid = mid if self.ema_mid is None else (
-            (1.0 - self.EMA_ALPHA) * self.ema_mid + self.EMA_ALPHA * mid
-        )
-        ema: float = self.ema_mid if self.ema_mid is not None else mid
-
         orders: List[Order] = []
         bought = 0
         sold = 0
 
-        # --- Layer 1: EMA mean-reversion aggressive takes ---
-        # Buy when ask is cheap relative to EMA
+        # --- Layer 1: Fixed-FV mean-reversion aggressive takes ---
+        # Buy when ask is cheap relative to FV
         for ask_price in sorted(order_depth.sell_orders.keys()):
-            if ask_price >= ema - self.TAKE_EDGE:
+            if ask_price >= self.FV - self.TAKE_EDGE:
                 break
             eff = pos + bought - sold
             if eff >= self.ER_CAP:
@@ -279,9 +275,9 @@ class HydrogelStrategy(Strategy):
                 orders.append(Order(self.symbol, ask_price, qty))
                 bought += qty
 
-        # Sell when bid is rich relative to EMA
+        # Sell when bid is rich relative to FV
         for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
-            if bid_price <= ema + self.TAKE_EDGE:
+            if bid_price <= self.FV + self.TAKE_EDGE:
                 break
             eff = pos + bought - sold
             if eff <= -self.ER_CAP:
@@ -341,8 +337,6 @@ class VelvetfruitStrategy(Strategy):
 
     FV: float = 5_250.0
     ENTRY_THR: float = 20.0
-    # VELVETFRUIT std ≈ 15 ticks. Entry at 20 ticks (~1.3σ from FV).
-    # Stop at 40 ticks beyond entry means total 60 ticks from FV (~4σ) — very extreme.
     STOP_LOSS_TICKS: float = 40.0
 
     def __init__(self, symbol: str, position_limit: int) -> None:
