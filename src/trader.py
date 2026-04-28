@@ -1,4 +1,5 @@
 import json
+import math
 from abc import ABC, abstractmethod
 from typing import Dict, List, Optional, Tuple
 
@@ -27,6 +28,65 @@ class Strategy(ABC):
 
     def load_state(self, data: dict) -> None:
         pass
+
+
+VEV_STRIKES = {
+    "VEV_4000": 4000,
+    "VEV_4500": 4500,
+    "VEV_5000": 5000,
+    "VEV_5100": 5100,
+    "VEV_5200": 5200,
+    "VEV_5300": 5300,
+    "VEV_5400": 5400,
+    "VEV_5500": 5500,
+    "VEV_6000": 6000,
+    "VEV_6500": 6500,
+}
+
+
+def mid_price(depth: OrderDepth) -> Optional[float]:
+    if not depth.buy_orders or not depth.sell_orders:
+        return None
+    return (max(depth.buy_orders) + min(depth.sell_orders)) / 2.0
+
+
+def norm_cdf(x: float) -> float:
+    return 0.5 * (1.0 + math.erf(x / math.sqrt(2.0)))
+
+
+def bs_call_price(S: float, K: float, t_days: float, sigma: float) -> float:
+    if S <= 0 or K <= 0:
+        return max(S - K, 0.0)
+
+    T = max(t_days, 0.0) / 365.0
+    if T <= 0.0 or sigma <= 0.0:
+        return max(S - K, 0.0)
+
+    vol_sqrt_t = sigma * math.sqrt(T)
+    if vol_sqrt_t <= 0.0:
+        return max(S - K, 0.0)
+
+    d1 = (math.log(S / K) + 0.5 * sigma * sigma * T) / vol_sqrt_t
+    d2 = d1 - vol_sqrt_t
+    return S * norm_cdf(d1) - K * norm_cdf(d2)
+
+
+def implied_tte_days(price: float, S: float, K: float, sigma: float) -> Optional[float]:
+    intrinsic = max(S - K, 0.0)
+    if price < intrinsic - 0.25:
+        return None
+    if price <= intrinsic + 0.05:
+        return 0.05
+
+    lo = 0.05
+    hi = 10.0
+    for _ in range(32):
+        mid = (lo + hi) / 2.0
+        if bs_call_price(S, K, mid, sigma) > price:
+            hi = mid
+        else:
+            lo = mid
+    return (lo + hi) / 2.0
 
 
 
@@ -218,21 +278,19 @@ class HydrogelStrategy(Strategy):
       yet, giving us one tick of queue priority over the reactive Layer 2.
     """
 
-    # EMA
-    EMA_ALPHA: float = 0.005   # ~140-tick half-life; slower anchors FV better for MR
+    EMA_ALPHA: float = 0.005
 
     # Layer 1 parameters
-    TAKE_EDGE: float = 20.0    # min overshot from EMA to take aggressively
-    MAX_TAKE: int = 5          # max units per aggressive-take tick
-    ER_CAP: int = 150          # position hard cap for Layer 1; keeps 50 free for Layer 2
+    TAKE_EDGE: float = 20.0
+    MAX_TAKE: int = 5
+    ER_CAP: int = 175
 
     # Layer 2 parameters
-    MAX_M38: int = 25          # max units per Mark 38 passive intercept
-    M38_CAP: int = 75          # max net position held from M38 reactive trades;
-                               # prevents unlimited inventory buildup if M38 trends
+    MAX_M38: int = 25
+    M38_CAP: int = 75
 
     # Layer 2b parameters
-    IMBAL_THR: float = 0.15    # book imbalance threshold to trigger pre-positioning
+    IMBAL_THR: float = 0.15
 
     def __init__(self, symbol: str, position_limit: int) -> None:
         super().__init__(symbol, position_limit)
@@ -257,7 +315,7 @@ class HydrogelStrategy(Strategy):
         self.ema_mid = mid if self.ema_mid is None else (
             (1.0 - self.EMA_ALPHA) * self.ema_mid + self.EMA_ALPHA * mid
         )
-        ema: float = self.ema_mid if self.ema_mid is not None else mid
+        ema: float = self.ema_mid
 
         orders: List[Order] = []
         bought = 0
@@ -340,9 +398,7 @@ class VelvetfruitStrategy(Strategy):
     """
 
     FV: float = 5_250.0
-    ENTRY_THR: float = 20.0
-    # VELVETFRUIT std ≈ 15 ticks. Entry at 20 ticks (~1.3σ from FV).
-    # Stop at 40 ticks beyond entry means total 60 ticks from FV (~4σ) — very extreme.
+    ENTRY_THR: float = 18.0
     STOP_LOSS_TICKS: float = 40.0
 
     def __init__(self, symbol: str, position_limit: int) -> None:
@@ -426,23 +482,52 @@ class VelvetfruitStrategy(Strategy):
 
 class VevOptionStrategy(Strategy):
     """
-    Options overlay using the VELVETFRUIT_EXTRACT price as the signal.
+    Strike-aware VEV voucher strategy.
 
-    VEV_XXXX are European call options on VELVETFRUIT_EXTRACT priced by the
-    BOT via a no-theta BS surface (option price is a deterministic function of
-    S only, confirmed empirically). This means we can trade them exactly like
-    the underlying: when S deviates from FV, take a max option position in the
-    direction of reversion.
+    Round-4 evidence splits the chain into three regimes:
+      - VEV_4000/4500 are deterministic intrinsic-value proxies.
+      - VEV_5000-5500 are real options with visible theta decay.
+      - VEV_6000/6500 are dead strikes; Mark 22 prints them at zero.
 
-    The signal (S deviation) is read from the VELVETFRUIT book each tick, not
-    from this instrument's own price. Stop-loss is triggered if the underlying
-    moves STOP_LOSS_TICKS adverse to the entry direction.
+    The real-option strikes are priced with a Black-Scholes call surface. We
+    infer the current time-to-expiry from the visible chain so the same code can
+    run on any historical/final day without a day identifier in TradingState.
+    Separately, we post passive bids in VEV_5200/5300 when VFE is deeply below
+    fair, targeting Mark 22's recurring bid-side sells.
     """
 
     UNDERLYING: str = "VELVETFRUIT_EXTRACT"
     FV: float = 5_250.0
-    ENTRY_THR: float = 20.0
+    ENTRY_THR: float = 18.0
     STOP_LOSS_TICKS: float = 40.0
+    MARK22_BID_UNDERLYING_THR: float = 5_230.0
+
+    # Fitted from round-4 VEV_5000-5500 surfaces when TTE is 7/6/5 days.
+    OPTION_SIGMA: float = 0.241
+    FALLBACK_TTE_DAYS: float = 4.0
+
+    DEAD_STRIKES = {"VEV_6000", "VEV_6500"}
+    REAL_OPTION_STRIKES = {
+        "VEV_5000",
+        "VEV_5100",
+        "VEV_5200",
+        "VEV_5300",
+        "VEV_5400",
+        "VEV_5500",
+    }
+    MARK22_PASSIVE_BID_STRIKES = {"VEV_5200", "VEV_5300"}
+
+    EXIT_UNDERLYING_THR: float = 5_250.0
+    MAX_EXIT_PER_TICK: int = 25
+    MAX_PASSIVE_FAIR_PREMIUM: float = 10.0
+    PASSIVE_BID_CAP = {
+        "VEV_5200": 160,
+        "VEV_5300": 220,
+    }
+    PASSIVE_BID_SIZE = {
+        "VEV_5200": 20,
+        "VEV_5300": 25,
+    }
 
     def __init__(self, symbol: str, position_limit: int) -> None:
         super().__init__(symbol, position_limit)
@@ -453,6 +538,151 @@ class VevOptionStrategy(Strategy):
 
     def load_state(self, data: dict) -> None:
         self.entry_underlying = data.get("entry_underlying")
+
+    def estimate_tte_days(self, state: TradingState, S: float) -> float:
+        estimates: List[float] = []
+        for symbol in self.REAL_OPTION_STRIKES:
+            if symbol == self.symbol:
+                continue
+
+            depth = state.order_depths.get(symbol)
+            if depth is None:
+                continue
+
+            option_mid = mid_price(depth)
+            if option_mid is None:
+                continue
+
+            tte = implied_tte_days(
+                option_mid,
+                S,
+                VEV_STRIKES[symbol],
+                self.OPTION_SIGMA,
+            )
+            if tte is not None and 0.05 <= tte <= 10.0:
+                estimates.append(tte)
+
+        if not estimates:
+            intraday_decay = min(max(state.timestamp / 1_000_000.0, 0.0), 1.0)
+            return max(self.FALLBACK_TTE_DAYS - intraday_decay, 0.05)
+
+        estimates.sort()
+        mid = len(estimates) // 2
+        if len(estimates) % 2:
+            return estimates[mid]
+        return (estimates[mid - 1] + estimates[mid]) / 2.0
+
+    def fair_value(self, state: TradingState, S: float) -> Optional[float]:
+        if self.symbol in self.DEAD_STRIKES:
+            return None
+
+        K = VEV_STRIKES[self.symbol]
+        if self.symbol in {"VEV_4000", "VEV_4500"}:
+            return max(S - K, 0.0)
+
+        tte_days = self.estimate_tte_days(state, S)
+        return bs_call_price(S, K, tte_days, self.OPTION_SIGMA)
+
+    def directional_reversion_orders(
+        self,
+        depth: OrderDepth,
+        pos: int,
+        S: float,
+    ) -> Tuple[List[Order], int, int]:
+        orders: List[Order] = []
+
+        # Stop-loss: close if the underlying moved adverse to the entry.
+        if self.entry_underlying is not None and pos != 0:
+            adverse = (self.entry_underlying - S) if pos > 0 else (S - self.entry_underlying)
+            if adverse > self.STOP_LOSS_TICKS:
+                if pos > 0:
+                    sold = 0
+                    for bid_price in sorted(depth.buy_orders.keys(), reverse=True):
+                        remaining = pos - sold
+                        if remaining <= 0:
+                            break
+                        qty = min(depth.buy_orders[bid_price], remaining)
+                        if qty > 0:
+                            orders.append(Order(self.symbol, bid_price, -qty))
+                            sold += qty
+                    self.entry_underlying = None
+                    return orders, 0, sold
+
+                bought = 0
+                for ask_price in sorted(depth.sell_orders.keys()):
+                    remaining = -pos - bought
+                    if remaining <= 0:
+                        break
+                    qty = min(-depth.sell_orders[ask_price], remaining)
+                    if qty > 0:
+                        orders.append(Order(self.symbol, ask_price, qty))
+                        bought += qty
+                self.entry_underlying = None
+                return orders, bought, 0
+
+        bought = 0
+        sold = 0
+        dev = S - self.FV
+
+        if dev < -self.ENTRY_THR and pos < self.position_limit:
+            for ask_price in sorted(depth.sell_orders.keys()):
+                remaining = self.position_limit - pos - bought
+                if remaining <= 0:
+                    break
+                qty = min(-depth.sell_orders[ask_price], remaining)
+                if qty > 0:
+                    orders.append(Order(self.symbol, ask_price, qty))
+                    bought += qty
+            if bought > 0:
+                self.entry_underlying = S
+
+        elif dev > self.ENTRY_THR and pos > -self.position_limit:
+            for bid_price in sorted(depth.buy_orders.keys(), reverse=True):
+                remaining = self.position_limit + pos - sold
+                if remaining <= 0:
+                    break
+                qty = min(depth.buy_orders[bid_price], remaining)
+                if qty > 0:
+                    orders.append(Order(self.symbol, bid_price, -qty))
+                    sold += qty
+            if sold > 0:
+                self.entry_underlying = S
+
+        elif pos == 0:
+            self.entry_underlying = None
+
+        return orders, bought, sold
+
+    def mark22_passive_bid(
+        self,
+        depth: OrderDepth,
+        fair: float,
+        S: float,
+        pos_after_takes: int,
+        already_bought: int,
+    ) -> List[Order]:
+        if self.symbol not in self.MARK22_PASSIVE_BID_STRIKES:
+            return []
+        if S >= self.MARK22_BID_UNDERLYING_THR:
+            return []
+
+        best_bid = max(depth.buy_orders)
+        best_ask = min(depth.sell_orders)
+        bid_price = best_bid + 1
+        if bid_price >= best_ask:
+            return []
+        if bid_price > fair + self.MAX_PASSIVE_FAIR_PREMIUM:
+            return []
+
+        cap = min(
+            self.PASSIVE_BID_CAP[self.symbol] - pos_after_takes,
+            self.position_limit - pos_after_takes,
+            self.PASSIVE_BID_SIZE[self.symbol] - already_bought,
+        )
+        if cap <= 0:
+            return []
+
+        return [Order(self.symbol, bid_price, cap)]
 
     def run(self, state: TradingState) -> List[Order]:
         order_depth: Optional[OrderDepth] = state.order_depths.get(self.symbol)
@@ -471,63 +701,16 @@ class VevOptionStrategy(Strategy):
         und_bid = max(und_depth.buy_orders.keys())
         und_ask = min(und_depth.sell_orders.keys())
         S = (und_bid + und_ask) / 2.0
-        dev = S - self.FV
 
-        orders: List[Order] = []
+        fair = self.fair_value(state, S)
+        if fair is None:
+            return []
 
-        # Stop-loss: close if underlying moved STOP_LOSS_TICKS adverse to position.
-        if self.entry_underlying is not None and pos != 0:
-            adverse = (self.entry_underlying - S) if pos > 0 else (S - self.entry_underlying)
-            if adverse > self.STOP_LOSS_TICKS:
-                if pos > 0:
-                    for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
-                        remaining = pos - sum(-o.quantity for o in orders)
-                        if remaining <= 0:
-                            break
-                        qty = min(order_depth.buy_orders[bid_price], remaining)
-                        if qty > 0:
-                            orders.append(Order(self.symbol, bid_price, -qty))
-                else:
-                    for ask_price in sorted(order_depth.sell_orders.keys()):
-                        remaining = -pos - sum(o.quantity for o in orders)
-                        if remaining <= 0:
-                            break
-                        qty = min(-order_depth.sell_orders[ask_price], remaining)
-                        if qty > 0:
-                            orders.append(Order(self.symbol, ask_price, qty))
-                self.entry_underlying = None
-                return orders
-
-        buys = 0
-        sells = 0
-
-        if dev < -self.ENTRY_THR and pos < self.position_limit:
-            for ask_price in sorted(order_depth.sell_orders.keys()):
-                remaining = self.position_limit - pos - buys
-                if remaining <= 0:
-                    break
-                qty = min(-order_depth.sell_orders[ask_price], remaining)
-                if qty > 0:
-                    orders.append(Order(self.symbol, ask_price, qty))
-                    buys += qty
-            if buys > 0:
-                self.entry_underlying = S
-
-        elif dev > self.ENTRY_THR and pos > -self.position_limit:
-            for bid_price in sorted(order_depth.buy_orders.keys(), reverse=True):
-                remaining = self.position_limit + pos - sells
-                if remaining <= 0:
-                    break
-                qty = min(order_depth.buy_orders[bid_price], remaining)
-                if qty > 0:
-                    orders.append(Order(self.symbol, bid_price, -qty))
-                    sells += qty
-            if sells > 0:
-                self.entry_underlying = S
-
-        elif pos == 0:
-            self.entry_underlying = None
-
+        orders, bought, sold = self.directional_reversion_orders(order_depth, pos, S)
+        pos_after_directional = pos + bought - sold
+        orders.extend(
+            self.mark22_passive_bid(order_depth, fair, S, pos_after_directional, bought)
+        )
         return orders
 
 
