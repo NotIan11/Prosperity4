@@ -2,19 +2,23 @@
 
 ## What shipped
 
-**v12** (`docs/round_3/r3_trader.py`, `vfe_equiv_target=160`). Live result: $53,790 first sub, mean ~$50k across 3 reruns (portal bot fills are stochastic, ±$10k). Shipped live ~4× Ian ($13.5k).
+**v12** (`docs/round_3/r3_trader.py`, `vfe_equiv_target=160`).
+
+- **R3 final scoring run (10k ticks, day 3): $77,539** — the actual leaderboard number.
+- **Portal sandbox preview (1k ticks of day 2): $53,790 first try, ~$50k mean across 3 reruns** — used for pre-submit testing only; stochastic ±$10k.
+- BT day 3 (extracted from live log): $210,908 → 2.72× over-prediction.
 
 BT summary:
 ```
 v1 baseline:    31,606  PnL  Sharpe 2.50  Calmar 7.09
-v12 final:     460,722  PnL  Sharpe 5.20  Calmar 7.62  | LIVE $53,790
+v12 final BT:  460,722  PnL  Sharpe 5.20  Calmar 7.62  | LIVE day-3 $77,539
 ```
 
-Vs teammate live results:
-- v12 (us): ~$50k mean
-- v15 (us + gate): $46k — gate cost $7.6k
-- v16 (friend live-delta): $33k — noisy small-sample deltas
-- Ian v2 (cap=300 uniform): $13.5k — bots dodge over-aggression
+Vs teammate live results (portal-sandbox numbers, the only ones we have for comparison):
+- v12 (us): ~$50k mean sandbox / $77,539 actual scoring
+- v15 (us + gate): $46k sandbox — gate cost $7.6k
+- v16 (friend live-delta): $33k sandbox — noisy small-sample deltas
+- Ian v2 (cap=300 uniform): $13.5k sandbox — bots dodge over-aggression
 
 ## Lessons (with evidence)
 
@@ -24,7 +28,9 @@ Vs teammate live results:
 
 **VFE L1-L2 spread differential predicts micro-direction** (r=−0.21 at h=1, t=−37, 30k samples). Less sticky than flow — usable as quote skew (v4).
 
-**Portal sim = first 1000 ticks of day 2** (verified byte-identical against live log; Discord: theethan7114). BT is ~37% optimistic vs live for passive MM (calibration 0.73); closer to 1.0 for take-based strategies.
+**Portal sandbox = first 1000 ticks of day 2** (verified byte-identical against live log). Final scoring is full 10k ticks of the hidden scoring day (day 3) — different number from sandbox.
+
+**Same-day BT calibration: 2.72× over-prediction** (BT $210,908 vs live $77,539 on day 3, extracted from r3 final log). The real divergence source is platform 20% NPC-order randomization + matching-engine differences, not "bot reactivity by competitors" (teams trade independently against IMC NPC bots — see `docs/competition.md`). Earlier 0.73× calibration in `bt_dual.py` was wrong-direction.
 
 **VFE FV drifts day-by-day** (5244 → 5258). Rolling-1000 median FV reduces false "extreme deviation" signals from 20.7% → 13.1% vs hardcoded 5250 (v9).
 
