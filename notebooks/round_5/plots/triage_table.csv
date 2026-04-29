@@ -1,0 +1,51 @@
+product,category,triage,ar1_mean,reason,key_lenses,unresolved
+GALAXY_SOUNDS_BLACK_HOLES,GALAXY_SOUNDS,probably noise,-0.0167,"AR(1)=-0.017 (mean), no within-cat corr (mean 0.004), no sum constraint","NB03,NB06",None
+GALAXY_SOUNDS_DARK_MATTER,GALAXY_SOUNDS,probably noise,-0.0115,"AR(1)=-0.012, spread unstable (NB02 cell 4), no structure across lenses","NB03,NB06",None
+GALAXY_SOUNDS_PLANETARY_RINGS,GALAXY_SOUNDS,probably noise,-0.0032,"AR(1)=-0.003, all lenses return noise; spread unstable day-over-day","NB02,NB03,NB06",None
+GALAXY_SOUNDS_SOLAR_FLAMES,GALAXY_SOUNDS,probably noise,-0.012,"AR(1)=-0.012, feature R2=0.089 (NB07), no exploitable structure","NB07,NB06",None
+GALAXY_SOUNDS_SOLAR_WINDS,GALAXY_SOUNDS,probably noise,-0.0073,"AR(1)=-0.007, near-zero within-cat return corr (mean 0.004), no structure","NB06,NB05",None
+MICROCHIP_CIRCLE,MICROCHIP,probably noise,-0.0052,"No sum constraint (5-sum CV=3.04%), all pairwise corr<0.013; independent RW (CC9)","CC9,NB09,NB04",Trade-schedule anomaly (569 vs 733) unexplained mechanically
+MICROCHIP_OVAL,MICROCHIP,probably noise,-0.0073,Largest drift (day-means 9766->8544->6229) but no cross-product structure; trending RW,"NB08,CC9",Strong downward trend; no basket or AR(1) signal
+MICROCHIP_RECTANGLE,MICROCHIP,probably noise,-0.0026,"AR(1)=-0.003, no structure beyond baseline; independent RW confirmed (CC9)","CC9,NB06",None
+MICROCHIP_SQUARE,MICROCHIP,probably noise,-0.0221,Distributional outlier (mean 13595 vs siblings 8180-9686) but AR(1)=-0.022; RW,"NB01,CC9",Price level far above siblings; idiosyncratic but no exploitable signal
+MICROCHIP_TRIANGLE,MICROCHIP,probably noise,-0.0078,"AR(1)=-0.008, no sum constraint, no pairwise corr; 5 independent RWs confirmed (CC9)","CC9,NB03",None
+OXYGEN_SHAKE_CHOCOLATE,OXYGEN_SHAKE,probably tradable,-0.076,"Jump-diffusion: sq_acf_lag1=0.239, kurtosis=10.77, 38-44% zero-return ticks (NB08); AR(1)=-0.076","NB08,NB09",Jump origin not verified; vol clustering is jump-diffusion not GARCH
+OXYGEN_SHAKE_EVENING_BREATH,OXYGEN_SHAKE,probably tradable,-0.1118,"Step-function (+-10 grid, 39% zero-ret), AR(1)=-0.112; reversal_frac=54% (>50% baseline)","NB09,CA_B2,CB3",Reversal 54% (not 100% as Critic B claimed); weak MR above bounce confirmed
+OXYGEN_SHAKE_GARLIC,OXYGEN_SHAKE,probably noise,-0.0031,"AR(1)=-0.003, no structure; spread unstable day-to-day (NB02 cell 4)","NB02,NB03",None
+OXYGEN_SHAKE_MINT,OXYGEN_SHAKE,probably noise,-0.0031,No anomaly across any lens; AR(1) near zero; typical random walk,"NB03,NB06",None
+OXYGEN_SHAKE_MORNING_BREATH,OXYGEN_SHAKE,probably noise,-0.0053,"AR(1)=-0.005, no structure detected; near-baseline across all lenses","NB03,NB06",None
+PANEL_1X2,PANEL,probably noise,-0.0023,Trend R2=0.766 (highest among PANEL) but AR(1)=-0.002; trend without AR(1) not tick-exploitable,"NB03,CA_B3",D4: trend R2 IS significant above null (p=0.0067) but no AR(1) or corr structure
+PANEL_1X4,PANEL,probably noise,-0.0015,"Trend R2=0.487, AR(1) near zero; area encoding unstable (NB07 rank rho=0.467)","NB03,NB07,CA_B3",None
+PANEL_2X2,PANEL,probably noise,-0.0098,"No AR(1), no feature signal, no cointegration with any sibling","NB03,NB07",None
+PANEL_2X4,PANEL,probably noise,-0.0017,"Trend R2=0.622, AR(1)=-0.002; trending RW only, not tick-exploitable","NB03,CA_B3",None
+PANEL_4X4,PANEL,probably noise,-0.0062,"Weakest trend (R2=0.231), area encoding violated (cheapest despite largest area, NB07)","NB07,NB03",None
+PEBBLES_L,PEBBLES,likely exploitable,0.0073,"5-sum=50000 hard constraint; size rank preserved; anti-corr pred=-0.397, obs=-0.493 (partial mechanical)","NB09,NB07,CC3",Outlier sum states at +-15 ticks
+PEBBLES_M,PEBBLES,likely exploitable,-0.0043,"5-sum=50000 replicable all 3 days; size-price rank XS<S<M<L<XL (Spearman 1.0 on 2/3 days, NB07)","NB09,CA_B5,NB07",Mechanical anti-corr; outlier sum states at +-15
+PEBBLES_S,PEBBLES,likely exploitable,0.0083,"5-sum=50000 replicable all 3 days; anti-corr with XL partially mechanical (pred -0.347, obs -0.483)","NB09,CA_B5,CB2",Mechanical component explains partial but not full anti-corr magnitude
+PEBBLES_XL,PEBBLES,likely exploitable,0.0091,5-sum=50000; XL dominates PC1 (loading +0.784); anti-corr pred=-0.505 matches obs -0.506 most closely,"NB09,NB06,CA_B5",Outlier sum states at +-15; no lead-lag with other PEBBLES products
+PEBBLES_XS,PEBBLES,likely exploitable,-0.0172,"5-sum=50000 (CV=0.006%, 88.8% within +-0.5); constraint tick-level simultaneous (lag-0 only, CC3)","NB09,CC3,CB2",Tri-modal sum deviation: outlier states at +-15; no lead-lag between products
+ROBOT_DISHES,ROBOT,probably noise,-0.0976,"Day-4 structural break only (AR(1)=-0.289 day-4, var 6.7x normal); PC3 singleton = artifact (CB6)","NB08,CB6,CA_M6",PC3 disappears per-day and with standardized PCA; not replicable across days
+ROBOT_IRONING,ROBOT,probably tradable,-0.1167,AR(1)=-0.117 (all 3 days negative); reversal_frac=55% (>50% baseline); step=10 on 10-grid (NB09),"CA_B2,CB3,NB09","Critic B claimed 100% reversal (wrong, computed 55%); step>half-spread=3.2"
+ROBOT_LAUNDRY,ROBOT,probably noise,0.006,"No AR(1), no structure; spread regime unstable (NB02 cell 4)","NB02,NB03",None
+ROBOT_MOPPING,ROBOT,probably noise,-0.0122,"AR(1)=-0.012, no mode prevalence, no corr structure; Ward cluster singleton (NB06)","NB06,NB03",None
+ROBOT_VACUUMING,ROBOT,probably noise,-0.008,"Near-zero AR(1), tight spread (6.75) but no replicable MR; no structure","NB02,NB03",None
+SLEEP_POD_COTTON,SLEEP_POD,probably noise,-0.0024,"No AR(1), feature R2=0.051, no cointegration; slow-drifting RW","NB07,NB03,NB05",None
+SLEEP_POD_LAMB_WOOL,SLEEP_POD,probably noise,0.0037,"No structure across all lenses; low CV, no intraday pattern","NB03,NB06",None
+SLEEP_POD_NYLON,SLEEP_POD,probably noise,0.0007,Trend R2=0.737 (2nd highest across all 50) but AR(1) near zero; not tick-exploitable,"NB03,CA_B3","Trend signal present (D4 significant, p=0.0067) but no mechanism for extraction"
+SLEEP_POD_POLYESTER,SLEEP_POD,probably noise,-0.0014,"No AR(1), no corr, no feature signal; slow-drifting RW","NB08,NB03",None
+SLEEP_POD_SUEDE,SLEEP_POD,probably noise,-0.0066,"No AR(1), no feature signal, no within-cat corr","NB03,NB07",None
+SNACKPACK_CHOCOLATE,SNACKPACK,probably tradable,-0.0308,"CHOC/VAN corr=-0.916 pooled, per-day -0.92 to -0.92; Group A anti-corr pair (CC1)","CC1,CB5,NB09",Pair-sum drifts -98 to -57 per day; per-day ADF not significant (CC7)
+SNACKPACK_PISTACHIO,SNACKPACK,probably tradable,-0.0251,PIST/STRAW=+0.913 (Group B co-moving); PIST/RASP=-0.831; Group A cross-corr<=0.04,"CC1,CB5",PIST-STRAW spread non-stationary; co-move but not cointegrated (CC10)
+SNACKPACK_RASPBERRY,SNACKPACK,probably tradable,-0.017,"STRAW/RASP=-0.924 pooled, per-day -0.93 to -0.92; Group B anti-corr confirmed (CC1)","CC1,CB5",RASP+PIST pair-sum drifts -116 to -209 per day; no intraday stationarity
+SNACKPACK_STRAWBERRY,SNACKPACK,probably tradable,-0.0138,STRAW/RASP=-0.924; PIST/STRAW=+0.913; both stable across 3 days (per-day verified),"CC1,CB4,CB5",Pair-sum not stationary within day (CC7/CA_M1); AR(1)=-0.014
+SNACKPACK_VANILLA,SNACKPACK,probably tradable,-0.027,"CHOC/VAN=-0.916 pooled, per-day return corr=-0.91 to -0.92; most stable SNACKPACK","CC1,CB5,NB09",CHOC+VAN sum drifts -57 to -98 per day; pooled cointegration spurious (CA_B4)
+TRANSLATOR_ASTRO_BLACK,TRANSLATOR,probably noise,-0.0067,"Near-zero AR(1), color-darkness R2=0.388 but rank unstable (rho(2,3)=0.100, NB07)","NB07,NB08",None
+TRANSLATOR_ECLIPSE_CHARCOAL,TRANSLATOR,probably noise,-0.007,"Low CV (0.019, NB08); AR(1) near zero; no structure","NB08,NB03",None
+TRANSLATOR_GRAPHITE_MIST,TRANSLATOR,probably noise,-0.0037,No structure; feature encoding unstable day-to-day (NB07),"NB07,NB03",None
+TRANSLATOR_SPACE_GRAY,TRANSLATOR,probably noise,0.0074,No structure; color-encoding near-zero days 2/3 (NB07),"NB07,NB03",None
+TRANSLATOR_VOID_BLUE,TRANSLATOR,probably noise,-0.0092,Highest price in category (mean 10859) but AR(1) near zero; no replicable signal,"NB01,NB03",None
+UV_VISOR_AMBER,UV_VISOR,probably noise,-0.0031,"Distributional outlier (mean 7912 vs category 10500+, NB01) but AR(1) near zero; no structure","NB01,NB07",Severe price separation from siblings unexplained
+UV_VISOR_MAGENTA,UV_VISOR,probably noise,-0.0032,No anomaly detected; AR(1) near zero; typical random walk,"NB03,NB06",None
+UV_VISOR_ORANGE,UV_VISOR,probably noise,0.0013,"No AR(1), feature encoding negligible; wavelength encoding day-4-only (NB07, CA_M3)","NB07,NB03",None
+UV_VISOR_RED,UV_VISOR,probably noise,-0.0039,Borderline ADF stationarity (p=0.035 day-2) fails Bonferroni correction (threshold 0.00033),"NB03,CA_m7",None
+UV_VISOR_YELLOW,UV_VISOR,probably noise,0.003,"No AR(1), no structure; feature encoding not applicable","NB03,NB06",None

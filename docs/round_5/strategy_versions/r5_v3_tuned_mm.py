@@ -1,4 +1,4 @@
-"""IMC Prosperity 4 — Round 5 trader (v4: MM all 50 products).
+"""IMC Prosperity 4 — Round 5 trader (v3: tuned passive MM).
 
 Triage source: docs/round_5/research/EDA_FINAL_TRIAGE.md
 
@@ -217,41 +217,18 @@ class PebblesCoordinator:
 # Trader
 # ----------------------------------------------------------------------
 
-# Per-product MM config. v4: passive MM on every non-PEBBLE product.
-# Spreads are 6.4-17.8 across all 50 products; even noise products yield
-# capture if MM avoids drift bleeds via stop-loss + skew.
-
-_DEFAULT_MM = {"skew": 0.4, "soft_cap": 7, "stop_loss_ticks": 60.0}
-_SNACKPACK_MM = {"skew": 0.5, "soft_cap": 7, "stop_loss_ticks": 80.0}
-_STEP_MM = {"skew": 0.6, "soft_cap": 8, "stop_loss_ticks": 40.0}
-
-ALL_NON_PEBBLE_PRODUCTS = (
-    "GALAXY_SOUNDS_BLACK_HOLES", "GALAXY_SOUNDS_DARK_MATTER",
-    "GALAXY_SOUNDS_PLANETARY_RINGS", "GALAXY_SOUNDS_SOLAR_FLAMES",
-    "GALAXY_SOUNDS_SOLAR_WINDS",
-    "MICROCHIP_CIRCLE", "MICROCHIP_OVAL", "MICROCHIP_RECTANGLE",
-    "MICROCHIP_SQUARE", "MICROCHIP_TRIANGLE",
-    "OXYGEN_SHAKE_GARLIC", "OXYGEN_SHAKE_MINT", "OXYGEN_SHAKE_MORNING_BREATH",
-    "PANEL_1X2", "PANEL_1X4", "PANEL_2X2", "PANEL_2X4", "PANEL_4X4",
-    "ROBOT_DISHES", "ROBOT_LAUNDRY", "ROBOT_MOPPING", "ROBOT_VACUUMING",
-    "SLEEP_POD_COTTON", "SLEEP_POD_LAMB_WOOL", "SLEEP_POD_NYLON",
-    "SLEEP_POD_POLYESTER", "SLEEP_POD_SUEDE",
-    "TRANSLATOR_ASTRO_BLACK", "TRANSLATOR_ECLIPSE_CHARCOAL",
-    "TRANSLATOR_GRAPHITE_MIST", "TRANSLATOR_SPACE_GRAY", "TRANSLATOR_VOID_BLUE",
-    "UV_VISOR_AMBER", "UV_VISOR_MAGENTA", "UV_VISOR_ORANGE",
-    "UV_VISOR_RED", "UV_VISOR_YELLOW",
-)
-
-PER_PRODUCT_CFG: dict[str, dict[str, Any]] = {}
-for _p in ALL_NON_PEBBLE_PRODUCTS:
-    PER_PRODUCT_CFG[_p] = dict(_DEFAULT_MM)
-for _p in ("SNACKPACK_CHOCOLATE", "SNACKPACK_VANILLA", "SNACKPACK_STRAWBERRY",
-           "SNACKPACK_RASPBERRY", "SNACKPACK_PISTACHIO"):
-    PER_PRODUCT_CFG[_p] = dict(_SNACKPACK_MM)
-for _p in ("ROBOT_IRONING", "OXYGEN_SHAKE_EVENING_BREATH"):
-    PER_PRODUCT_CFG[_p] = dict(_STEP_MM)
-# OXYGEN_SHAKE_CHOCOLATE: jump-diffusion. Use widest stop and lowest soft_cap.
-PER_PRODUCT_CFG["OXYGEN_SHAKE_CHOCOLATE"] = {"skew": 0.4, "soft_cap": 5, "stop_loss_ticks": 100.0}
+# Per-product MM config
+PER_PRODUCT_CFG: dict[str, dict[str, Any]] = {
+    # SNACKPACK (wide ~17 spreads, strong MM opportunity)
+    "SNACKPACK_CHOCOLATE":  {"skew": 0.5, "soft_cap": 7, "stop_loss_ticks": 80.0},
+    "SNACKPACK_VANILLA":    {"skew": 0.5, "soft_cap": 7, "stop_loss_ticks": 80.0},
+    "SNACKPACK_STRAWBERRY": {"skew": 0.5, "soft_cap": 7, "stop_loss_ticks": 80.0},
+    "SNACKPACK_RASPBERRY":  {"skew": 0.5, "soft_cap": 7, "stop_loss_ticks": 80.0},
+    "SNACKPACK_PISTACHIO":  {"skew": 0.5, "soft_cap": 7, "stop_loss_ticks": 80.0},
+    # Step-fn products: tighter skew, smaller stop (step=10 grid)
+    "ROBOT_IRONING":               {"skew": 0.6, "soft_cap": 8, "stop_loss_ticks": 40.0},
+    "OXYGEN_SHAKE_EVENING_BREATH": {"skew": 0.6, "soft_cap": 8, "stop_loss_ticks": 40.0},
+}
 
 
 class Trader:
