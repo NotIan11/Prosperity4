@@ -1,24 +1,25 @@
-"""IMC Prosperity 4 — Round 5 trader (v6: v4 minus consistent bleeders).
-
-v4 (MM all 50): BT $265k, live $20.5k, monotone-up curve, near-zero
-drawdown. v5 added directional bets per drift table -> bled $9k vs v4 in
-live because directional persistence is unreliable across days (Critic A
-was right: trend R²>0.3 isn't significant signal).
-
-v6 keeps v4's robust passive-MM-only architecture and only drops products
-that bled in BOTH BT and live (consistent bleeders, regime-independent).
-No directional bets, no delay tricks, no overfitting to capsule drift.
-
-Dropped (4 products):
-- ROBOT_DISHES (BT -$4.1k, live -$1.4k) — day-4 variance break (CB6/D6)
-- OXYGEN_SHAKE_MINT (BT -$1.4k, live ~-$34)
-- MICROCHIP_TRIANGLE (BT -$260, live -$355)
-- OXYGEN_SHAKE_MORNING_BREATH (BT -$204, live -$595)
-
-Active = 46 products (5 PEBBLES + 41 other R5).
+"""IMC Prosperity 4 — Round 5 trader (v5: directional + MM hybrid).
 
 Triage source: docs/round_5/research/EDA_FINAL_TRIAGE.md
-Position limit = 10/product.
+Drift table source: per-product polyfit slopes across days 2/3/4.
+
+v4 (MM on all 50): BT $265k / live $20.5k. Capped at MM premium.
+v5 adds a directional layer: 13 products with sign-stable drift across all 3
+capsule days are traded as `DirectionalStrategy` (max long/short, hold).
+Inspired by Ian's R5 bot which earned $33k live with the same pattern.
+
+Active strategies:
+- DirectionalStrategy x13: 9 short + 4 long (drift sign-stable across d2/d3/d4)
+- PebblesCoordinator x3 (M, L, XL): basket-aware MM. XS and S removed
+  because they're now outright shorts; basket overlay still functions on
+  the remaining 3 since XS+S deviation now expresses as our short position.
+- PassiveMM x33: every other product
+
+Pitfalls accounted for:
+- traderData round-trip: kept (PassiveMM stores rolling mids; Directional is stateless)
+- No PnL caps on size; respects POSITION_LIMIT=10
+- Directional has no stop-loss intentionally — trends span full day; v4
+  data shows MM-style stops fired against winning trends.
 """
 
 from __future__ import annotations
@@ -37,10 +38,6 @@ except ImportError:
 POSITION_LIMIT = 10
 
 
-# ----------------------------------------------------------------------
-# helpers
-# ----------------------------------------------------------------------
-
 def _mid(depth: OrderDepth) -> float | None:
     if not depth or not depth.buy_orders or not depth.sell_orders:
         return None
@@ -56,22 +53,49 @@ def _best_ask(depth: OrderDepth) -> int | None:
 
 
 # ----------------------------------------------------------------------
-# Passive MM core
+# DirectionalStrategy: max-position-and-hold
+# ----------------------------------------------------------------------
+
+class DirectionalStrategy:
+    """Hold max long (+1) or max short (-1). Sweeps the touch to reach target."""
+
+    def __init__(self, symbol: str, direction: int) -> None:
+        assert direction in (-1, 1)
+        self.symbol = symbol
+        self.direction = direction
+
+    def save(self) -> dict[str, Any]:
+        return {}
+
+    def load(self, d: dict[str, Any]) -> None:
+        pass
+
+    def act(self, state: TradingState) -> list[Order]:
+        depth = state.order_depths.get(self.symbol)
+        if depth is None:
+            return []
+        pos = state.position.get(self.symbol, 0)
+        target = self.direction * POSITION_LIMIT
+        diff = target - pos
+        if diff == 0:
+            return []
+        if diff > 0:
+            ba = _best_ask(depth)
+            if ba is None:
+                return []
+            return [Order(self.symbol, ba, diff)]
+        bb = _best_bid(depth)
+        if bb is None:
+            return []
+        return [Order(self.symbol, bb, diff)]  # diff is negative
+
+
+# ----------------------------------------------------------------------
+# Passive MM core (carried from v4)
 # ----------------------------------------------------------------------
 
 class PassiveMM:
-    """Generic passive market maker for one product.
-
-    Posts bid at best_bid+1 and ask at best_ask-1 (penny-inside the touch),
-    with a position-skew that pulls quotes back toward flat inventory:
-        bid_px -= skew * position
-        ask_px -= skew * position
-
-    Soft inventory cap stops adding when |pos| reaches soft_cap.
-    Hard stop-loss flatten when adverse_move from rolling-mean fair exceeds
-    stop_loss_ticks (defends against regime breaks like the day-4 ROBOT_DISHES
-    spike that fooled NB06).
-    """
+    """Penny-inside-touch quote with position skew + rolling-mean stop-loss."""
 
     def __init__(
         self,
@@ -79,7 +103,7 @@ class PassiveMM:
         skew: float = 0.4,
         soft_cap: int = 8,
         window: int = 500,
-        stop_loss_ticks: float = 40.0,
+        stop_loss_ticks: float = 60.0,
     ) -> None:
         self.symbol = symbol
         self.skew = skew
@@ -103,30 +127,24 @@ class PassiveMM:
         self.mids.append(m)
         pos = state.position.get(self.symbol, 0)
 
-        # Stop-loss: if mid has moved adversely vs rolling fair, flatten.
         if pos != 0 and len(self.mids) >= 100:
             mean = sum(self.mids) / len(self.mids)
             adverse = (m - mean) if pos > 0 else (mean - m)
-            # adverse > stop_loss => mark-to-market deep loss; go flat at touch
             if adverse > self.stop_loss_ticks:
                 if pos > 0:
                     return [Order(self.symbol, bb, -pos)]
-                else:
-                    return [Order(self.symbol, ba, -pos)]
+                return [Order(self.symbol, ba, -pos)]
 
-        # Quote prices: penny inside the touch, with combined skew.
         total_skew = self.skew * pos + extra_skew
         bid_px = bb + 1 - total_skew
         ask_px = ba - 1 - total_skew
         bid_px_i = int(math.floor(bid_px))
         ask_px_i = int(math.ceil(ask_px))
-        # Don't cross or invert
         if bid_px_i >= ba:
             bid_px_i = ba - 1
         if ask_px_i <= bb:
             ask_px_i = bb + 1
         if bid_px_i >= ask_px_i:
-            # spread too tight to fit two quotes: just quote at touch
             bid_px_i = bb
             ask_px_i = ba
 
@@ -146,27 +164,19 @@ class PassiveMM:
 
 
 # ----------------------------------------------------------------------
-# PEBBLES basket coordinator
+# PEBBLES coordinator (M, L, XL — basket overlay on remaining 3)
 # ----------------------------------------------------------------------
 
 class PebblesCoordinator:
-    """MM each PEBBLE plus a basket-tilt overlay.
+    """MM PEBBLES_{M,L,XL}. Residual-skew overlay anchored on the 3-product
+    rolling-mean of the basket sum: when our 3-product sum is high vs its
+    rolling mean, ask-aggressively the most-overpriced one."""
 
-    Basket signal: sum(mids) - 50000. Tri-modal at {0, +14-16, -17-18} (NB09).
-    Each pebble's residual = mid - rolling_mean (window=200).
-    extra_skew per pebble = beta * residual (pulls quotes against the deviation).
-    Larger beta where the basket constraint is tighter.
-    """
-
-    SYMBOLS = (
-        "PEBBLES_XS", "PEBBLES_S", "PEBBLES_M", "PEBBLES_L", "PEBBLES_XL",
-    )
-    TARGET_SUM = 50000
-    BETA = 0.6  # residual->skew gain
+    SYMBOLS = ("PEBBLES_M", "PEBBLES_L", "PEBBLES_XL")
+    BETA = 0.6
     ROLL_WINDOW = 200
 
     def __init__(self) -> None:
-        # Pebbles drift across days (NB08): means shift up to 30%. Loose stop_loss.
         self.makers: dict[str, PassiveMM] = {
             s: PassiveMM(s, skew=0.4, soft_cap=8, window=500, stop_loss_ticks=80.0)
             for s in self.SYMBOLS
@@ -188,7 +198,6 @@ class PebblesCoordinator:
             self.basket_hist[s] = deque(v[-self.ROLL_WINDOW:], maxlen=self.ROLL_WINDOW)
 
     def act(self, state: TradingState) -> dict[str, list[Order]]:
-        # collect mids for residual computation
         mids: dict[str, float] = {}
         for s in self.SYMBOLS:
             depth = state.order_depths.get(s)
@@ -197,7 +206,6 @@ class PebblesCoordinator:
                 mids[s] = m
                 self.basket_hist[s].append(m)
 
-        # residuals (only if we have enough history)
         residuals: dict[str, float] = {}
         if len(mids) == len(self.SYMBOLS) and all(
             len(self.basket_hist[s]) >= 30 for s in self.SYMBOLS
@@ -216,61 +224,83 @@ class PebblesCoordinator:
 
 
 # ----------------------------------------------------------------------
-# Trader
+# Trader registry
 # ----------------------------------------------------------------------
 
-# Per-product MM config. v4: passive MM on every non-PEBBLE product.
-# Spreads are 6.4-17.8 across all 50 products; even noise products yield
-# capture if MM avoids drift bleeds via stop-loss + skew.
+# 13 directional products (sign-stable drift across days 2/3/4).
+# Sign convention: -1 = max short, +1 = max long. Magnitude in name comments
+# is the average per-day total drift in capsule.
+DIRECTIONAL: dict[str, int] = {
+    # Short (down-drifters)
+    "PEBBLES_XS":            -1,   # avg -1760
+    "MICROCHIP_OVAL":        -1,   # avg -1247
+    "ROBOT_IRONING":         -1,   # avg -1027
+    "PEBBLES_S":             -1,   # avg  -932
+    "UV_VISOR_AMBER":        -1,   # avg  -726
+    "TRANSLATOR_ASTRO_BLACK":-1,   # avg  -532
+    "UV_VISOR_ORANGE":       -1,   # avg  -360
+    "SNACKPACK_PISTACHIO":   -1,   # avg  -302
+    "SNACKPACK_CHOCOLATE":   -1,   # avg  -232
+    # Long (up-drifters)
+    "SNACKPACK_VANILLA":     +1,   # avg  +258
+    "GALAXY_SOUNDS_BLACK_HOLES": +1,  # avg +1095
+    "PANEL_2X4":             +1,   # avg +1115
+    "OXYGEN_SHAKE_GARLIC":   +1,   # avg +1482
+}
 
-_DEFAULT_MM = {"skew": 0.4, "soft_cap": 7, "stop_loss_ticks": 60.0}
-_SNACKPACK_MM = {"skew": 0.5, "soft_cap": 7, "stop_loss_ticks": 80.0}
-_STEP_MM = {"skew": 0.6, "soft_cap": 8, "stop_loss_ticks": 40.0}
+# Everything else gets passive MM. PEBBLES_{M,L,XL} handled by coordinator.
+PEBBLES_COORDINATOR_SYMS = {"PEBBLES_M", "PEBBLES_L", "PEBBLES_XL"}
 
-# 41 non-PEBBLE products. 4 dropped vs v4 because they bled in BOTH BT
-# and live: ROBOT_DISHES, OXYGEN_SHAKE_MINT, MICROCHIP_TRIANGLE,
-# OXYGEN_SHAKE_MORNING_BREATH.
-ALL_NON_PEBBLE_PRODUCTS = (
+ALL_R5_PRODUCTS = (
     "GALAXY_SOUNDS_BLACK_HOLES", "GALAXY_SOUNDS_DARK_MATTER",
     "GALAXY_SOUNDS_PLANETARY_RINGS", "GALAXY_SOUNDS_SOLAR_FLAMES",
     "GALAXY_SOUNDS_SOLAR_WINDS",
     "MICROCHIP_CIRCLE", "MICROCHIP_OVAL", "MICROCHIP_RECTANGLE",
-    "MICROCHIP_SQUARE",
-    "OXYGEN_SHAKE_GARLIC",
+    "MICROCHIP_SQUARE", "MICROCHIP_TRIANGLE",
+    "OXYGEN_SHAKE_CHOCOLATE", "OXYGEN_SHAKE_EVENING_BREATH",
+    "OXYGEN_SHAKE_GARLIC", "OXYGEN_SHAKE_MINT", "OXYGEN_SHAKE_MORNING_BREATH",
     "PANEL_1X2", "PANEL_1X4", "PANEL_2X2", "PANEL_2X4", "PANEL_4X4",
-    "ROBOT_LAUNDRY", "ROBOT_MOPPING", "ROBOT_VACUUMING",
+    "PEBBLES_L", "PEBBLES_M", "PEBBLES_S", "PEBBLES_XL", "PEBBLES_XS",
+    "ROBOT_DISHES", "ROBOT_IRONING", "ROBOT_LAUNDRY", "ROBOT_MOPPING",
+    "ROBOT_VACUUMING",
     "SLEEP_POD_COTTON", "SLEEP_POD_LAMB_WOOL", "SLEEP_POD_NYLON",
     "SLEEP_POD_POLYESTER", "SLEEP_POD_SUEDE",
+    "SNACKPACK_CHOCOLATE", "SNACKPACK_PISTACHIO", "SNACKPACK_RASPBERRY",
+    "SNACKPACK_STRAWBERRY", "SNACKPACK_VANILLA",
     "TRANSLATOR_ASTRO_BLACK", "TRANSLATOR_ECLIPSE_CHARCOAL",
-    "TRANSLATOR_GRAPHITE_MIST", "TRANSLATOR_SPACE_GRAY", "TRANSLATOR_VOID_BLUE",
+    "TRANSLATOR_GRAPHITE_MIST", "TRANSLATOR_SPACE_GRAY",
+    "TRANSLATOR_VOID_BLUE",
     "UV_VISOR_AMBER", "UV_VISOR_MAGENTA", "UV_VISOR_ORANGE",
     "UV_VISOR_RED", "UV_VISOR_YELLOW",
 )
 
-PER_PRODUCT_CFG: dict[str, dict[str, Any]] = {}
-for _p in ALL_NON_PEBBLE_PRODUCTS:
-    PER_PRODUCT_CFG[_p] = dict(_DEFAULT_MM)
-for _p in ("SNACKPACK_CHOCOLATE", "SNACKPACK_VANILLA", "SNACKPACK_STRAWBERRY",
-           "SNACKPACK_RASPBERRY", "SNACKPACK_PISTACHIO"):
-    PER_PRODUCT_CFG[_p] = dict(_SNACKPACK_MM)
-for _p in ("ROBOT_IRONING", "OXYGEN_SHAKE_EVENING_BREATH"):
-    PER_PRODUCT_CFG[_p] = dict(_STEP_MM)
-# OXYGEN_SHAKE_CHOCOLATE: jump-diffusion. Use widest stop and lowest soft_cap.
-PER_PRODUCT_CFG["OXYGEN_SHAKE_CHOCOLATE"] = {"skew": 0.4, "soft_cap": 5, "stop_loss_ticks": 100.0}
+_MM_DEFAULT = {"skew": 0.4, "soft_cap": 7, "stop_loss_ticks": 60.0}
+_MM_SNACKPACK = {"skew": 0.5, "soft_cap": 7, "stop_loss_ticks": 80.0}
+_MM_STEP = {"skew": 0.6, "soft_cap": 8, "stop_loss_ticks": 40.0}
+
+PER_PRODUCT_MM_CFG: dict[str, dict[str, Any]] = {}
+for _p in ALL_R5_PRODUCTS:
+    if _p in DIRECTIONAL or _p in PEBBLES_COORDINATOR_SYMS:
+        continue
+    if _p in {"SNACKPACK_RASPBERRY", "SNACKPACK_STRAWBERRY"}:
+        PER_PRODUCT_MM_CFG[_p] = dict(_MM_SNACKPACK)
+    elif _p in {"OXYGEN_SHAKE_EVENING_BREATH"}:
+        PER_PRODUCT_MM_CFG[_p] = dict(_MM_STEP)
+    else:
+        PER_PRODUCT_MM_CFG[_p] = dict(_MM_DEFAULT)
 
 
 class Trader:
     def __init__(self) -> None:
+        self.directional = {sym: DirectionalStrategy(sym, d) for sym, d in DIRECTIONAL.items()}
         self.pebbles = PebblesCoordinator()
-        self.per_product: dict[str, PassiveMM] = {
-            sym: PassiveMM(sym, **cfg) for sym, cfg in PER_PRODUCT_CFG.items()
-        }
+        self.mm = {sym: PassiveMM(sym, **cfg) for sym, cfg in PER_PRODUCT_MM_CFG.items()}
 
     def _save_state(self) -> str:
         try:
             return json.dumps({
                 "pebbles": self.pebbles.save(),
-                "per_product": {sym: s.save() for sym, s in self.per_product.items()},
+                "mm": {sym: s.save() for sym, s in self.mm.items()},
             }, separators=(",", ":"))
         except Exception:
             return ""
@@ -284,20 +314,28 @@ class Trader:
             return
         if isinstance(payload.get("pebbles"), dict):
             self.pebbles.load(payload["pebbles"])
-        for sym, sub in payload.get("per_product", {}).items():
-            if sym in self.per_product and isinstance(sub, dict):
-                self.per_product[sym].load(sub)
+        for sym, sub in payload.get("mm", {}).items():
+            if sym in self.mm and isinstance(sub, dict):
+                self.mm[sym].load(sub)
 
     def run(self, state: TradingState) -> tuple[dict[str, list[Order]], int, str]:
         self._load_state(state.traderData or "")
 
         result: dict[str, list[Order]] = {}
 
+        # Directional
+        for sym, strat in self.directional.items():
+            orders = strat.act(state)
+            if orders:
+                result.setdefault(sym, []).extend(orders)
+
+        # PEBBLES basket-MM
         for sym, orders in self.pebbles.act(state).items():
             if orders:
                 result.setdefault(sym, []).extend(orders)
 
-        for sym, strat in self.per_product.items():
+        # Passive MM
+        for sym, strat in self.mm.items():
             orders = strat.act(state)
             if orders:
                 result.setdefault(sym, []).extend(orders)
