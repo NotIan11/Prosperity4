@@ -425,7 +425,7 @@ class VevOptionTaker:
         return orders
 
 
-def voucher_cap_for(strike: str, vfe_equiv_target: int = 80) -> int:
+def voucher_cap_for(strike: str, vfe_equiv_target: int = 160) -> int:
     """Cap voucher position so its VFE-equivalent exposure equals target.
     e.g. delta=0.5, target=80 -> cap=160 voucher units."""
     delta = VOUCHER_DELTA[strike]

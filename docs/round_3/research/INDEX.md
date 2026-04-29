@@ -10,13 +10,6 @@ For teammates joining mid-round. Start at the top, go in order.
 - **[../brief.md](../brief.md)** — official R3 mechanics (products, position
   limits, manual round rules). Source of truth for the rules.
 
-## State of the work
-
-- **[_session_state.md](_session_state.md)** — what we've done, what we
-  haven't, what's a draft vs locked. Read after `09_synthesis.md` if you
-  need to pick up mid-flow.
-- **[_next_steps.md](_next_steps.md)** — open decisions and parking lot.
-
 ## Data analysis (what the historical CSVs show us)
 
 - **[01_initial_eda.md](01_initial_eda.md)** — first pass. Cross-product
@@ -63,15 +56,11 @@ All gathered 2026-04-26 from messages after 2026-04-20.
 - **[08d_discord_open_source.md](08d_discord_open_source.md)** —
   backtester landscape; community fork survey.
 
-## Code we've written
+## Ship code
 
-- `src/trader.py` — **DRAFT** baseline trader (HYDROGEL + VFE MM).
-  Do NOT submit without validating against synthesis recommendations.
+- `src/trader.py` / `docs/round_3/r3_trader.py` — **v12** (identical). Final R3 submission.
 - `src/utils/black_scholes.py` — stdlib-only BS class, ported from CMU.
-- `notebooks/01–05_*.py` — runnable EDA scripts. The notebooks the
-  agents wrote, kept for reproducibility.
-- Backtest runs directly via `venv/bin/prosperity4btest cli src/trader.py 3`.
-  No harness needed — see `03_tooling_landscape.md`.
+- Backtest: `venv/bin/prosperity4btest cli src/trader.py 3`. See `03_tooling_landscape.md`.
 
 ## Conventions
 

@@ -10,15 +10,13 @@ PnL was reset at start of R3 — only R3–R5 results count toward final ranking
 If you're a fresh Claude resuming this project for R4/R5, read these in order
 before doing anything else:
 
-1. **`docs/round_3/JOURNEY.md`** — full v1→v12 narrative (5 min read).
-   Final R3 ship: `docs/round_3/strategies/snapshots/v12_trader.py`.
+1. **`docs/round_3/JOURNEY.md`** — R3 retrospective: what shipped, lessons, carry-overs.
    Live result: ~$50k mean (best run $53,790, ~4x Ian's $13.5k).
-2. **`docs/round_3/strategies/README.md`** — version index table.
-3. **`docs/round_3/strategies/v12_cap_160.md`** — current ship strategy doc.
-4. **`docs/round_3/research/17_portal_stochasticity_and_state.md`** —
+2. **`docs/round_3/r3_strategy.md`** — v12 ship strategy doc.
+3. **`docs/round_3/research/17_portal_stochasticity_and_state.md`** —
    critical late finding: portal is non-deterministic, traderData is
    defensive hygiene, live > BT slice means state DOES persist on IMC.
-5. **`docs/round_3/research/16_regime_patterns.md`** — empirical voucher
+4. **`docs/round_3/research/16_regime_patterns.md`** — empirical voucher
    deltas, the basis for our strike-aware sizing.
 
 Key R4/R5 carry-over candidates (untried, in priority order):
@@ -29,17 +27,19 @@ Key R4/R5 carry-over candidates (untried, in priority order):
   gate (binary gate cost $7.6k live; v15 post-mortem).
 - Defensive cap reduction if rolling-FV drifts > 50 ticks from 5250.
 
-## Current state (post R3)
+## Current state (post R3, R4 active)
 
-- Branch: `ben-r3`. v12 shipped, live ~$50k mean.
-- All v1-v16 strategy iterations documented in `docs/round_3/strategies/`.
-- 16 research docs in `docs/round_3/research/` covering EDA, BT calibration,
+- Branch: `ben-r3`. v12 shipped live ~$50k mean. R3 closed.
+- Ship code: `src/trader.py` = `docs/round_3/r3_trader.py` (identical, vfe_equiv_target=160).
+- Strategy doc: `docs/round_3/r3_strategy.md`. Retrospective: `docs/round_3/JOURNEY.md`.
+- 17 research docs in `docs/round_3/research/` covering EDA, BT calibration,
   teammate strategy comparisons, regime patterns.
 - Tooling: `notebooks/99_trader_bt_explorer.ipynb` (BT + plots for any
   trader), `notebooks/v12_bt_vs_live.ipynb` (side-by-side), `scripts/bt_dual.py`
   (full + portal-slice + live estimate).
-- Live logs: `data/live_logs/v12/` (3 runs), `data/live_logs/v15/`.
-- Teammate logs: `data/teammate_logs/{ian,ian2,rohit,rohit_wack,friend_live_delta}/`.
+- Live logs: `data/round_3/live_logs/v12/` (3 runs), `data/round_3/live_logs/v15/`.
+- Teammate logs: `data/round_3/teammate_logs/{ian,ian2,rohit,rohit_wack,friend_live_delta}/`.
+- R4/R5 data dirs ready: `data/round_4/`, `data/round_5/`.
 
 ## Pending docs to ingest (paste from Notion when ready)
 
