@@ -928,10 +928,19 @@ class VevOptionStrategy(Strategy):
 PRODUCTS = {
     # Round 5 — position limit 10 for all products
 
-    # Market making
-    "SNACKPACK_RASPBERRY":      EMAMarketMaker("SNACKPACK_RASPBERRY",      10, ema_alpha=0.01, take_edge=100),
-    "SNACKPACK_PISTACHIO":      EMAMarketMaker("SNACKPACK_PISTACHIO",      10, ema_alpha=0.01, take_edge=100),
-    "TRANSLATOR_GRAPHITE_MIST": EMAMarketMaker("TRANSLATOR_GRAPHITE_MIST", 10, ema_alpha=0.005, take_edge=200),
+    # Spread capture / market making
+    "SNACKPACK_RASPBERRY":      EMAMarketMaker("SNACKPACK_RASPBERRY",      10, ema_alpha=0.01, take_edge=10_000),
+    "TRANSLATOR_GRAPHITE_MIST": EMAMarketMaker("TRANSLATOR_GRAPHITE_MIST", 10, ema_alpha=0.005, take_edge=200, skew_per_lot=0.5),
+    "GALAXY_SOUNDS_DARK_MATTER":      EMAMarketMaker("GALAXY_SOUNDS_DARK_MATTER",      10, ema_alpha=0.01, take_edge=150),
+    "GALAXY_SOUNDS_PLANETARY_RINGS":  EMAMarketMaker("GALAXY_SOUNDS_PLANETARY_RINGS",  10, ema_alpha=0.01, take_edge=10_000),
+    "GALAXY_SOUNDS_SOLAR_WINDS":      EMAMarketMaker("GALAXY_SOUNDS_SOLAR_WINDS",      10, ema_alpha=0.01, take_edge=200),
+    "MICROCHIP_CIRCLE":               EMAMarketMaker("MICROCHIP_CIRCLE",               10, ema_alpha=0.01, take_edge=10_000),
+    "OXYGEN_SHAKE_CHOCOLATE":         EMAMarketMaker("OXYGEN_SHAKE_CHOCOLATE",         10, ema_alpha=0.01, take_edge=150),
+    "OXYGEN_SHAKE_MINT":              EMAMarketMaker("OXYGEN_SHAKE_MINT",              10, ema_alpha=0.01, take_edge=10_000),
+    "PEBBLES_M":                      EMAMarketMaker("PEBBLES_M",                      10, ema_alpha=0.01, take_edge=120),
+    "SLEEP_POD_NYLON":                EMAMarketMaker("SLEEP_POD_NYLON",                10, ema_alpha=0.01, take_edge=100),
+    "TRANSLATOR_ECLIPSE_CHARCOAL":    EMAMarketMaker("TRANSLATOR_ECLIPSE_CHARCOAL",    10, ema_alpha=0.01, take_edge=200),
+    "UV_VISOR_YELLOW":                EMAMarketMaker("UV_VISOR_YELLOW",                10, ema_alpha=0.01, take_edge=10_000),
 
     # Pair trading — CHOCOLATE/VANILLA cointegrated, sum locked at ~19,941 (σ=76)
     # Keyed under CHOCOLATE so dispatch fires when the leg is present; emits orders for both legs.
@@ -940,19 +949,79 @@ PRODUCTS = {
         position_limit=10, spread_mean=-254.0, entry_thr=500.0, exit_thr=0.0,
     ),
 
-    # Directional — short
-    "PEBBLES_XS":      DirectionalStrategy("PEBBLES_XS",      10, direction=-1),
-    "MICROCHIP_OVAL":  DirectionalStrategy("MICROCHIP_OVAL",  10, direction=-1),
-    "UV_VISOR_AMBER":  DirectionalStrategy("UV_VISOR_AMBER",  10, direction=-1),
-    "UV_VISOR_ORANGE": DirectionalStrategy("UV_VISOR_ORANGE", 10, direction=-1),
+    # Short-biased legs, with maker substitutions where execution beat holding
+    # PEBBLES: sum locked at 50,000; XS/S/L all drift below 10,000 start
+    "PEBBLES_XS": DirectionalStrategy("PEBBLES_XS", 10, direction=-1),  # drift −3962
+    "PEBBLES_S":  DirectionalStrategy("PEBBLES_S",  10, direction=-1),  # drift −1934
+    "PEBBLES_L":  EMAMarketMaker("PEBBLES_L", 10, ema_alpha=0.01, take_edge=100),  # drift  −874
 
-    # Directional — long
-    "PEBBLES_XL":          DirectionalStrategy("PEBBLES_XL",          10, direction=+1),
-    "MICROCHIP_SQUARE":    DirectionalStrategy("MICROCHIP_SQUARE",    10, direction=+1),
-    "OXYGEN_SHAKE_GARLIC": DirectionalStrategy("OXYGEN_SHAKE_GARLIC", 10, direction=+1),
-    "SLEEP_POD_POLYESTER": DirectionalStrategy("SLEEP_POD_POLYESTER", 10, direction=+1),
-    "UV_VISOR_MAGENTA":    DirectionalStrategy("UV_VISOR_MAGENTA",    10, direction=+1),
-    "UV_VISOR_RED":        DirectionalStrategy("UV_VISOR_RED",        10, direction=+1),
+    # MICROCHIP: OVAL/TRIANGLE/RECTANGLE all drift below 10,000
+    "MICROCHIP_OVAL":      DirectionalStrategy("MICROCHIP_OVAL",      10, direction=-1),  # drift −4481
+    "MICROCHIP_TRIANGLE":  DirectionalStrategy("MICROCHIP_TRIANGLE",  10, direction=-1),  # drift −2058
+    "MICROCHIP_RECTANGLE": DirectionalStrategy("MICROCHIP_RECTANGLE", 10, direction=-1),  # drift −1228
+
+    # ROBOT: IRONING/VACUUMING/LAUNDRY all drift below 10,000
+    "ROBOT_IRONING":   DirectionalStrategy("ROBOT_IRONING",   10, direction=-1),  # drift −2170
+    "ROBOT_VACUUMING": DirectionalStrategy("ROBOT_VACUUMING", 10, direction=-1),  # drift −1725
+    "ROBOT_LAUNDRY":   EMAMarketMaker("ROBOT_LAUNDRY", 10, ema_alpha=0.01, take_edge=100),  # drift  −746
+
+    # TRANSLATOR: SPACE_GRAY/ASTRO_BLACK drift below 10,000
+    "TRANSLATOR_SPACE_GRAY":  DirectionalStrategy("TRANSLATOR_SPACE_GRAY",  10, direction=-1),  # drift −1571
+    "TRANSLATOR_ASTRO_BLACK": EMAMarketMaker("TRANSLATOR_ASTRO_BLACK", 10, ema_alpha=0.01, take_edge=100),  # drift −1036
+
+    # PANEL: all except 2X4 drift below 10,000
+    "PANEL_4X4": EMAMarketMaker("PANEL_4X4", 10, ema_alpha=0.01, take_edge=150),  # drift −872
+    "PANEL_1X4": EMAMarketMaker("PANEL_1X4", 10, ema_alpha=0.01, take_edge=10_000),  # drift −772
+    "PANEL_2X2": EMAMarketMaker("PANEL_2X2", 10, ema_alpha=0.01, take_edge=100),  # drift −607
+    "PANEL_1X2": DirectionalStrategy("PANEL_1X2", 10, direction=-1),  # drift −304
+
+    # OXYGEN_SHAKE: EVENING_BREATH/MORNING_BREATH drift below 10,000
+    "OXYGEN_SHAKE_EVENING_BREATH": EMAMarketMaker("OXYGEN_SHAKE_EVENING_BREATH", 10, ema_alpha=0.01, take_edge=10_000),  # drift −580
+    "OXYGEN_SHAKE_MORNING_BREATH": EMAMarketMaker("OXYGEN_SHAKE_MORNING_BREATH", 10, ema_alpha=0.01, take_edge=10_000),  # drift −450
+
+    # SNACKPACK: PISTACHIO drifts below 10,000 (changed from EMAMarketMaker to avoid bad inventory)
+    "SNACKPACK_PISTACHIO": DirectionalStrategy("SNACKPACK_PISTACHIO", 10, direction=-1),  # drift −887
+
+    # UV_VISOR
+    "UV_VISOR_AMBER":  DirectionalStrategy("UV_VISOR_AMBER",  10, direction=-1),  # drift −2870
+    "UV_VISOR_ORANGE": EMAMarketMaker("UV_VISOR_ORANGE", 10, ema_alpha=0.01, take_edge=200),  # drift  −660
+
+    # Long-biased legs
+    # PEBBLES_XL: largest drift in entire round
+    "PEBBLES_XL": DirectionalStrategy("PEBBLES_XL", 10, direction=+1),  # drift +6068
+
+    # MICROCHIP
+    "MICROCHIP_SQUARE": DirectionalStrategy("MICROCHIP_SQUARE", 10, direction=+1),  # drift +3633
+
+    # OXYGEN_SHAKE
+    "OXYGEN_SHAKE_GARLIC": DirectionalStrategy("OXYGEN_SHAKE_GARLIC", 10, direction=+1),  # drift +3886
+
+    # GALAXY_SOUNDS: BLACK_HOLES has the largest upward drift in the family
+    "GALAXY_SOUNDS_BLACK_HOLES": DirectionalStrategy("GALAXY_SOUNDS_BLACK_HOLES", 10, direction=+1),  # drift +3458
+
+    # PANEL
+    "PANEL_2X4": DirectionalStrategy("PANEL_2X4", 10, direction=+1),  # drift +2354
+
+    # SLEEP_POD: POLYESTER/SUEDE/COTTON all drift well above 10,000
+    "SLEEP_POD_POLYESTER":  DirectionalStrategy("SLEEP_POD_POLYESTER",  10, direction=+1),  # drift +1970
+    "SLEEP_POD_SUEDE":      DirectionalStrategy("SLEEP_POD_SUEDE",      10, direction=+1),  # drift +1800
+    "SLEEP_POD_COTTON":     DirectionalStrategy("SLEEP_POD_COTTON",     10, direction=+1),  # drift +1414
+    "SLEEP_POD_LAMB_WOOL":  DirectionalStrategy("SLEEP_POD_LAMB_WOOL",  10, direction=+1),  # drift  +808
+
+    # UV_VISOR
+    "UV_VISOR_RED":     DirectionalStrategy("UV_VISOR_RED",     10, direction=+1),  # drift +1722
+    "UV_VISOR_MAGENTA": DirectionalStrategy("UV_VISOR_MAGENTA", 10, direction=+1),  # drift +1532
+
+    # ROBOT
+    "ROBOT_MOPPING": DirectionalStrategy("ROBOT_MOPPING", 10, direction=+1),  # drift +1588
+    "ROBOT_DISHES":  DirectionalStrategy("ROBOT_DISHES",  10, direction=+1),  # drift +1200
+
+    # TRANSLATOR
+    "TRANSLATOR_VOID_BLUE": DirectionalStrategy("TRANSLATOR_VOID_BLUE", 10, direction=+1),  # drift +1564
+
+    # SNACKPACK
+    "SNACKPACK_STRAWBERRY": DirectionalStrategy("SNACKPACK_STRAWBERRY", 10, direction=+1),  # drift +902
+
 }
 
 
