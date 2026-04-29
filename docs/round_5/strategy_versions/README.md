@@ -11,6 +11,8 @@ BT runs are 3-day capsule (R5 days 2/3/4) via `prosperity4btest src/trader.py 5 
 | v4 | v3 + MM expanded to all 50 products (default skew=0.4, stop=60) | +$265,168 | +$20,559 | Monotone-up curve, trough -$67. Live bleeders: TRANSLATOR_SPACE_GRAY -$1.5k, GALAXY_SOUNDS_PLANETARY_RINGS -$1.5k, ROBOT_DISHES -$1.4k, UV_VISOR_AMBER -$0.6k. |
 | v5 | v4 + DirectionalStrategy on 13 products (sign-stable capsule drift, max long/short) | +$456,014 | +$11,295 | **Underperformed v4 live by $9k**. 6/13 directional bets reversed live. Trough -$9.3k. Drift signal not deterministic across days (Critic A right). |
 | v6 | v4 minus 4 consistent bleeders (BT&live both negative) | +$271,175 | (tbd) | ROBOT_DISHES, OXYGEN_SHAKE_MINT, MICROCHIP_TRIANGLE, OXYGEN_SHAKE_MORNING_BREATH skipped. No directional risk; preserves v4's monotone-up curve. |
+| v7 | v6 + regime-tuned MM (5 regimes) + 3 adaptive overlays: PEBBLES outlier-suppression, SNACKPACK 2+2+1 group skew, step-product post-step cooldown | +$257,046 | (tbd) | Each overlay bounded-downside (worst case: fewer fills). No capsule-drift fitting. |
+| v8 | v7 + Ian-v3-style "settled" gate on 3 ROBOT narrow_quiet products (LAUNDRY, MOPPING, VACUUMING) | +$257,832 | (tbd) | Gate is symmetric (no direction). Marginally improves ROBOT BT. Real value is OOS regime-shift protection. **Recommended submission for consistency over peak.** |
 
 ## Pitfalls already encountered
 

@@ -1,20 +1,4 @@
-"""IMC Prosperity 4 — Round 5 trader (v8: v7 + ROBOT settled-entry gate).
-
-v7 added regime tuning + 3 adaptive overlays. v8 adds a fourth:
-
-5. **Settled-entry gate (ROBOT category)**: ROBOT yields the lowest BT
-   contribution ($7k from 5 products in v6) and contains the day-4
-   regime-break case (ROBOT_DISHES). For the 3 active narrow_quiet ROBOT
-   products (ROBOT_LAUNDRY, ROBOT_MOPPING, ROBOT_VACUUMING), wrap MM in
-   an Ian-v3-style settled gate: track fast/slow EMAs, defer activation
-   until we see a |fast-slow| dislocation AND it returns within tolerance.
-   Symmetric (no direction commitment), bounded (just delays MM).
-
-(v7 docstring continues below.)
-
-v6 (passive MM on 46 products): BT $271k, monotone-up live curve.
-v7 keeps that structural core and adds three robust adaptive overlays
-(no directional bets, no capsule-drift fitting):
+"""IMC Prosperity 4 — Round 5 trader (v7: regime-tuned MM + adaptive overlays).
 
 v6 (passive MM on 46 products): BT $271k, monotone-up live curve.
 v7 keeps that structural core and adds three robust adaptive overlays
@@ -367,78 +351,6 @@ REGIME_BY_PRODUCT: dict[str, str] = {
     "ROBOT_IRONING":             "step_mr",
 }
 
-# ----------------------------------------------------------------------
-# Settled-entry gate (Ian-v3 inspired, symmetric — no direction)
-# ----------------------------------------------------------------------
-
-class SettledEntryGate:
-    """Defers a wrapped strategy until the market shows a dislocation
-    followed by a settle. Symmetric — no direction commitment.
-
-    Algorithm:
-      fast_mid = EMA(mid, alpha=0.05)
-      slow_mid = EMA(mid, alpha=0.005)
-      signal = fast_mid - slow_mid
-      Once |signal| >= TRIGGER * spread happens, mark `saw_dislocation`.
-      Activate when saw_dislocation AND |signal| <= SETTLE * spread.
-      Once active, stay active (no toggling).
-    """
-
-    FAST_ALPHA = 0.05
-    SLOW_ALPHA = 0.005
-    TRIGGER_SPREADS = 2.0
-    SETTLE_SPREADS = 1.0
-
-    def __init__(self, inner: PassiveMM) -> None:
-        self.inner = inner
-        self.fast_mid: float | None = None
-        self.slow_mid: float | None = None
-        self.saw_dislocation = False
-        self.active = False
-
-    def save(self) -> dict[str, Any]:
-        return {
-            "inner": self.inner.save(),
-            "fast_mid": self.fast_mid,
-            "slow_mid": self.slow_mid,
-            "saw_dislocation": self.saw_dislocation,
-            "active": self.active,
-        }
-
-    def load(self, d: dict[str, Any]) -> None:
-        if isinstance(d.get("inner"), dict):
-            self.inner.load(d["inner"])
-        self.fast_mid = d.get("fast_mid")
-        self.slow_mid = d.get("slow_mid")
-        self.saw_dislocation = bool(d.get("saw_dislocation", False))
-        self.active = bool(d.get("active", False))
-
-    def act(self, state: TradingState) -> list[Order]:
-        depth = state.order_depths.get(self.inner.symbol)
-        bb, ba = _best_bid(depth), _best_ask(depth)
-        if bb is None or ba is None:
-            return []
-        mid = (bb + ba) / 2.0
-        spread = max(ba - bb, 1.0)
-
-        if self.fast_mid is None:
-            self.fast_mid = mid
-            self.slow_mid = mid
-        else:
-            self.fast_mid = (1 - self.FAST_ALPHA) * self.fast_mid + self.FAST_ALPHA * mid
-            self.slow_mid = (1 - self.SLOW_ALPHA) * self.slow_mid + self.SLOW_ALPHA * mid
-        signal = abs(self.fast_mid - self.slow_mid)
-
-        if signal >= self.TRIGGER_SPREADS * spread:
-            self.saw_dislocation = True
-        if not self.active and self.saw_dislocation and signal <= self.SETTLE_SPREADS * spread:
-            self.active = True
-
-        if not self.active:
-            return []
-        return self.inner.act(state)
-
-
 PEBBLES_SET = {"PEBBLES_XS", "PEBBLES_S", "PEBBLES_M", "PEBBLES_L", "PEBBLES_XL"}
 SNACKPACK_SET = {
     "SNACKPACK_CHOCOLATE", "SNACKPACK_VANILLA", "SNACKPACK_STRAWBERRY",
@@ -446,19 +358,14 @@ SNACKPACK_SET = {
 }
 
 
-# ROBOT narrow_quiet products get the settled-entry gate (v8)
-ROBOT_GATED = {"ROBOT_LAUNDRY", "ROBOT_MOPPING", "ROBOT_VACUUMING"}
-
-
 class Trader:
     def __init__(self) -> None:
         self.pebbles = PebblesCoordinator()
         self.snackpack = SnackpackCoordinator()
-        self.mm: dict[str, Any] = {}  # PassiveMM or SettledEntryGate
+        self.mm: dict[str, PassiveMM] = {}
         for sym, regime in REGIME_BY_PRODUCT.items():
             cfg = dict(REGIME_TUPLES[regime])
-            inner = PassiveMM(sym, **cfg)
-            self.mm[sym] = SettledEntryGate(inner) if sym in ROBOT_GATED else inner
+            self.mm[sym] = PassiveMM(sym, **cfg)
 
     def _save_state(self) -> str:
         try:
