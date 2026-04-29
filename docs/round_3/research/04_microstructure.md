@@ -1,7 +1,7 @@
 # R3 microstructure — HYDROGEL_PACK + VELVETFRUIT_EXTRACT
 
 Source: `notebooks/02_microstructure_eda.py` over `data/round_3/prices_round_3_day_{0,1,2}.csv` (30k ticks/product).
-Plots: `docs/round_3/research/plots/02_*.png`.
+Plots: `docs/round_3/../../../notebooks/round_3/plots/02_*.png`.
 
 ## TL;DR
 

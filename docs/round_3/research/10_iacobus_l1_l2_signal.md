@@ -1,6 +1,6 @@
 # 10 — Iacobus L1 vs L2 spread signal
 
-Source: Discord user "iacobus" (untrusted) — claim: when L1 spread is wide vs L2, mid mean-reverts. Tested on R3 days 0/1/2 for `HYDROGEL_PACK` and `VELVETFRUIT_EXTRACT`. Script: `scripts/eda_10_iacobus.py`. Plots: `docs/round_3/research/plots/10_*.png`.
+Source: Discord user "iacobus" (untrusted) — claim: when L1 spread is wide vs L2, mid mean-reverts. Tested on R3 days 0/1/2 for `HYDROGEL_PACK` and `VELVETFRUIT_EXTRACT`. Script: `scripts/eda_10_iacobus.py`. Plots: `docs/round_3/../../../notebooks/round_3/plots/10_*.png`.
 
 ## Setup
 - L1_spread = ask1 − bid1; L2_spread = ask2 − bid2; `diff = L1 − L2`.

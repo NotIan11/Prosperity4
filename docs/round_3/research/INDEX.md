@@ -24,7 +24,7 @@ For teammates joining mid-round. Start at the top, go in order.
 - **[07_bot_trades.md](07_bot_trades.md)** — counterparty trade tape
   analysis. VFE buy-aggressor is informed (toxic flow); OTM voucher
   bots dump-only (harvestable).
-- **[plots/](plots/)** — the figures (one per question, named by
+- **[notebooks/round_3/plots/](../../../notebooks/round_3/plots/)** — the figures (one per question, named by
   domain prefix `02_*`, `03_*`, etc.). Look at `03_smile_drift.png`
   if you only look at one.
 

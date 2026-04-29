@@ -50,7 +50,7 @@ VEV_4000/4500 are deep ITM → mid is essentially intrinsic, IV reflects the rou
 - Day 1: `a` mean 0.057 ± 0.076 (range −0.21 → +0.28); `c` mean 0.230 ± 0.006.
 - Day 2: `a` mean 0.066 ± 0.070 (range −0.19 → +0.28); `c` mean 0.228 ± 0.007.
 - Curvature `a` swings sign intraday repeatedly. Level `c` is stable to ~3%.
-- Plot: `docs/round_3/research/plots/03_smile_drift.png`.
+- Plot: `docs/round_3/../../../notebooks/round_3/plots/03_smile_drift.png`.
 
 ### Q3 — Static day-0 smile, out-of-sample
 - Pooled day-0 fit: `a=0.1484, b=-0.0139, c=0.2260`.
@@ -135,7 +135,7 @@ within ±0.01. No exploitable lead-lag at this resolution.
    first, layer vol exposure later if positions naturally align.
 
 ## Plots
-- `docs/round_3/research/plots/03_iv_timeseries.png` — per-voucher IV time series (3 days).
-- `docs/round_3/research/plots/03_iv_surface.png` — mean IV (day × voucher) heatmap.
-- `docs/round_3/research/plots/03_smile_drift.png` — `a(t), b(t), c(t)` per day.
-- `docs/round_3/research/plots/03_residuals_per_strike.png` — rolling-smile residual series.
+- `docs/round_3/../../../notebooks/round_3/plots/03_iv_timeseries.png` — per-voucher IV time series (3 days).
+- `docs/round_3/../../../notebooks/round_3/plots/03_iv_surface.png` — mean IV (day × voucher) heatmap.
+- `docs/round_3/../../../notebooks/round_3/plots/03_smile_drift.png` — `a(t), b(t), c(t)` per day.
+- `docs/round_3/../../../notebooks/round_3/plots/03_residuals_per_strike.png` — rolling-smile residual series.

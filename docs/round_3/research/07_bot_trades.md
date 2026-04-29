@@ -2,7 +2,7 @@
 
 Source: `data/round_3/trades_round_3_day_{0,1,2}.csv` joined to
 `prices_round_3_day_*.csv`. Script: `notebooks/05_bot_trades_eda.py`.
-Plots: `docs/round_3/research/plots/05_*.png`.
+Plots: `docs/round_3/../../../notebooks/round_3/plots/05_*.png`.
 Numeric summary: `docs/round_3/research/05_bot_trades_summary.csv`.
 
 ## TL;DR
