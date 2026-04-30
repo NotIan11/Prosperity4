@@ -1,20 +1,39 @@
-"""IMC Prosperity 4 — Round 5 trader (v8: v7 + ROBOT settled-entry gate).
+"""IMC Prosperity 4 — Round 5 trader (v9: v7 + investigation-driven tuning).
 
-v7 added regime tuning + 3 adaptive overlays. v8 adds a fourth:
+v9 = v7 base + targeted regime/per-product changes from inv01-inv09:
 
-5. **Settled-entry gate (ROBOT category)**: ROBOT yields the lowest BT
-   contribution ($7k from 5 products in v6) and contains the day-4
-   regime-break case (ROBOT_DISHES). For the 3 active narrow_quiet ROBOT
-   products (ROBOT_LAUNDRY, ROBOT_MOPPING, ROBOT_VACUUMING), wrap MM in
-   an Ian-v3-style settled gate: track fast/slow EMAs, defer activation
-   until we see a |fast-slow| dislocation AND it returns within tolerance.
-   Symmetric (no direction commitment), bounded (just delays MM).
+REGIME-LEVEL CHANGES (A8 + A1 findings):
+- wide_drifty_mm: soft_cap 7→4 (A8: was bleeding inv-MTM at higher caps)
+- wide_drifty_mm: stop_loss 50→100 (A1: stops were net-NEGATIVE in this
+  regime; products trended after stop-fire crystallizing loss)
+- narrow_quiet_mm: soft_cap 7→5 (A8: same inv-MTM bleed)
 
-(v7 docstring continues below.)
+PER-PRODUCT OVERRIDES (only where regime classifier obviously misses):
+- MICROCHIP_SQUARE: skew 0.6→0.9, soft_cap 6→4 (A2 + A7 tail-risk:
+  it's the single largest tail-risk product, -$73k under spike scenario.
+  Price level 13.6k vs siblings 8-9k; A-S derives much higher skew)
+- UV_VISOR_AMBER: skew 0.5→0.3 (A2: A-S derives lower skew because price
+  level 7.9k is 25% below category mean)
+- PANEL_2X4: stop_loss 45→90 (A1: 28% save-rate; mostly bounces, not
+  breakouts — current stop crystallizes losses)
 
-v6 (passive MM on 46 products): BT $271k, monotone-up live curve.
-v7 keeps that structural core and adds three robust adaptive overlays
-(no directional bets, no capsule-drift fitting):
+DROPPED FROM v8:
+- ROBOT settled-gate: A7 explicitly recommends v7 over v8 (gate cost ~$1k/
+  day with no documented upside in any adversarial scenario).
+
+NOT INCLUDED (investigated, found insufficient):
+- A3 GARCH: only 2 products show vol clustering; static config OK for the rest
+- A4 cointegration: SNACKPACK group skew already does it; no new pairs
+- A5 BI-skew: only +$70/day, marginal
+- A9 XGBoost: 0 products cleared 55% OOS accuracy threshold
+
+Active products: 46. Triage: docs/round_5/research/EDA_FINAL_TRIAGE.md.
+Regime: docs/round_5/research/regime_analysis_v7.md.
+Investigations: docs/round_5/research/inv01-inv09.md.
+
+Original v7 docstring follows.
+
+---
 
 v6 (passive MM on 46 products): BT $271k, monotone-up live curve.
 v7 keeps that structural core and adds three robust adaptive overlays
@@ -201,8 +220,11 @@ class PebblesCoordinator:
     ROLL_WINDOW = 200
 
     def __init__(self) -> None:
+        # v9 Option C: lift soft_cap 8->10 (full position limit). PEBBLES is
+        # the most robust earner (A10: lowest CV); basket sum=50000 constraint
+        # mechanically bounds inventory MTM so leaning in here is safe.
         self.makers: dict[str, PassiveMM] = {
-            s: PassiveMM(s, skew=0.4, soft_cap=8, window=500, stop_loss_ticks=80.0)
+            s: PassiveMM(s, skew=0.4, soft_cap=10, window=500, stop_loss_ticks=80.0)
             for s in self.SYMBOLS
         }
         self.basket_hist: dict[str, deque[float]] = {
@@ -315,10 +337,23 @@ class SnackpackCoordinator:
 # Regime tuples (skew, soft_cap, stop_loss_ticks). Step-mr products also
 # get step_mode=True so the post-step cooldown widens quotes to touch.
 REGIME_TUPLES: dict[str, dict[str, Any]] = {
-    "narrow_quiet_mm":   {"skew": 0.4, "soft_cap": 7, "stop_loss_ticks": 60.0},
-    "wide_drifty_mm":    {"skew": 0.5, "soft_cap": 7, "stop_loss_ticks": 50.0},
+    # v9: narrow_quiet_mm soft_cap 7→5 (A8 inv-MTM bleed reduction)
+    "narrow_quiet_mm":   {"skew": 0.4, "soft_cap": 5, "stop_loss_ticks": 60.0},
+    # v9: wide_drifty_mm soft_cap 7→4, stop 50→100 (A8+A1: stops hurt here)
+    "wide_drifty_mm":    {"skew": 0.5, "soft_cap": 4, "stop_loss_ticks": 100.0},
     "narrow_volatile_mm":{"skew": 0.6, "soft_cap": 6, "stop_loss_ticks": 45.0},
     "step_mr":           {"skew": 0.6, "soft_cap": 8, "stop_loss_ticks": 40.0, "step_mode": True},
+}
+
+# v9 per-product overrides (regime classifier misses these outliers).
+# Empty dict for product means "use regime defaults".
+PRODUCT_OVERRIDES: dict[str, dict[str, Any]] = {
+    # A2 + A7: biggest tail-risk product, price level 57% above siblings
+    "MICROCHIP_SQUARE": {"skew": 0.9, "soft_cap": 4},
+    # A2: price level 25% below siblings; A-S derives lower skew
+    "UV_VISOR_AMBER":   {"skew": 0.3},
+    # A1: 28% save rate; mostly bounces, current stop crystallizes losses
+    "PANEL_2X4":        {"stop_loss_ticks": 90.0},
 }
 
 # Per-product regime assignment (from regime_analysis_v7.md, derived
@@ -367,78 +402,6 @@ REGIME_BY_PRODUCT: dict[str, str] = {
     "ROBOT_IRONING":             "step_mr",
 }
 
-# ----------------------------------------------------------------------
-# Settled-entry gate (Ian-v3 inspired, symmetric — no direction)
-# ----------------------------------------------------------------------
-
-class SettledEntryGate:
-    """Defers a wrapped strategy until the market shows a dislocation
-    followed by a settle. Symmetric — no direction commitment.
-
-    Algorithm:
-      fast_mid = EMA(mid, alpha=0.05)
-      slow_mid = EMA(mid, alpha=0.005)
-      signal = fast_mid - slow_mid
-      Once |signal| >= TRIGGER * spread happens, mark `saw_dislocation`.
-      Activate when saw_dislocation AND |signal| <= SETTLE * spread.
-      Once active, stay active (no toggling).
-    """
-
-    FAST_ALPHA = 0.05
-    SLOW_ALPHA = 0.005
-    TRIGGER_SPREADS = 2.0
-    SETTLE_SPREADS = 1.0
-
-    def __init__(self, inner: PassiveMM) -> None:
-        self.inner = inner
-        self.fast_mid: float | None = None
-        self.slow_mid: float | None = None
-        self.saw_dislocation = False
-        self.active = False
-
-    def save(self) -> dict[str, Any]:
-        return {
-            "inner": self.inner.save(),
-            "fast_mid": self.fast_mid,
-            "slow_mid": self.slow_mid,
-            "saw_dislocation": self.saw_dislocation,
-            "active": self.active,
-        }
-
-    def load(self, d: dict[str, Any]) -> None:
-        if isinstance(d.get("inner"), dict):
-            self.inner.load(d["inner"])
-        self.fast_mid = d.get("fast_mid")
-        self.slow_mid = d.get("slow_mid")
-        self.saw_dislocation = bool(d.get("saw_dislocation", False))
-        self.active = bool(d.get("active", False))
-
-    def act(self, state: TradingState) -> list[Order]:
-        depth = state.order_depths.get(self.inner.symbol)
-        bb, ba = _best_bid(depth), _best_ask(depth)
-        if bb is None or ba is None:
-            return []
-        mid = (bb + ba) / 2.0
-        spread = max(ba - bb, 1.0)
-
-        if self.fast_mid is None:
-            self.fast_mid = mid
-            self.slow_mid = mid
-        else:
-            self.fast_mid = (1 - self.FAST_ALPHA) * self.fast_mid + self.FAST_ALPHA * mid
-            self.slow_mid = (1 - self.SLOW_ALPHA) * self.slow_mid + self.SLOW_ALPHA * mid
-        signal = abs(self.fast_mid - self.slow_mid)
-
-        if signal >= self.TRIGGER_SPREADS * spread:
-            self.saw_dislocation = True
-        if not self.active and self.saw_dislocation and signal <= self.SETTLE_SPREADS * spread:
-            self.active = True
-
-        if not self.active:
-            return []
-        return self.inner.act(state)
-
-
 PEBBLES_SET = {"PEBBLES_XS", "PEBBLES_S", "PEBBLES_M", "PEBBLES_L", "PEBBLES_XL"}
 SNACKPACK_SET = {
     "SNACKPACK_CHOCOLATE", "SNACKPACK_VANILLA", "SNACKPACK_STRAWBERRY",
@@ -446,19 +409,16 @@ SNACKPACK_SET = {
 }
 
 
-# ROBOT narrow_quiet products get the settled-entry gate (v8)
-ROBOT_GATED = {"ROBOT_LAUNDRY", "ROBOT_MOPPING", "ROBOT_VACUUMING"}
-
-
 class Trader:
     def __init__(self) -> None:
         self.pebbles = PebblesCoordinator()
         self.snackpack = SnackpackCoordinator()
-        self.mm: dict[str, Any] = {}  # PassiveMM or SettledEntryGate
+        self.mm: dict[str, PassiveMM] = {}
         for sym, regime in REGIME_BY_PRODUCT.items():
             cfg = dict(REGIME_TUPLES[regime])
-            inner = PassiveMM(sym, **cfg)
-            self.mm[sym] = SettledEntryGate(inner) if sym in ROBOT_GATED else inner
+            # apply per-product overrides
+            cfg.update(PRODUCT_OVERRIDES.get(sym, {}))
+            self.mm[sym] = PassiveMM(sym, **cfg)
 
     def _save_state(self) -> str:
         try:
