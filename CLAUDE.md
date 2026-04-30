@@ -8,16 +8,15 @@ R3-R5 results count toward final ranking.
 
 ## ⭐ NEW SESSION? START HERE
 
-**Active submission: `src/trader.py` is v11** (also at
-`docs/round_5/strategy_versions/r5_v11_no_dir_skip_bleeders.py`).
-BT $743,544 across days 2/3/4 (rising 213k → 233k → 297k). Live tbd.
+**Active submission: `src/trader.py` is v13 = teammate Ian v16
+unchanged** (also at `docs/round_5/strategy_versions/r5_v13_ian_v16_unchanged.py`).
+BT $1,010,444. Ian's same code lived at $62,618 — known result.
 
-v11 = port of teammate Ian v25's architecture (EMAMarketMaker +
-selective take_edge + settled/trend gates) with ALL 22
-DirectionalStrategy lines stripped to EMA-MM, then 10 BT-bleeder
-products skipped. Lighter risk management than v9 (no stops, full
-position limit, mild 0.1 inventory skew). Expected live ~$52k,
-matching Ian v25's $52,288 live result.
+Live history this iteration: v11 (no directionals) $15k, v12 (v25 with
+gated directionals) $49k, Ian v16 $62.6k, Ian v25 $52.3k. Directionals
+ARE genuine alpha; my v11 strip was the mistake. Ian v25's "improvements"
+over v16 (slower EMAs, demoted directionals, activated RASPBERRY)
+overtuned and cost ~$10k live. v16 is the proven template.
 
 Resume order for R5 algo work:
 
@@ -48,11 +47,14 @@ For R3/R4 history (only if asked):
   Risk management was overboard — voluntarily capped at 40-70% of
   position limit while Ian uses full 10. Live $18-21k expected.
 - **What we proved doesn't work (don't re-explore)**:
-  - Capsule directional drift bets (v5: BT $456k, live $11k — 6/13 reversed)
+  - Stripping directional bets from Ian's architecture (v11: live $15k vs
+    Ian's $62k same architecture with directionals — 3.3× cost)
   - XGBoost / ML on tick returns (A9: 0 products clear 55% OOS)
   - New cointegrated pairs beyond SNACKPACK (A4: zero cross-category)
   - Stop-losses on wide_drifty regime (A1: net-negative)
   - ROBOT settled-gate (A7: net -$1k/day, no documented upside)
+  - Trend-gating directionals: v12 (gated) $49k vs Ian v25 (subset gated)
+    $52k — gate didn't help on capsule replay, fired trivially.
 - **Hard ceiling at limit=10**: only 23% of PnL is real spread capture
   (A8); rest is inventory-MTM exposure. NPC randomization gives ±$20k
   variance baseline (A10). Live PnL band is ~$15-30k for robust passive
