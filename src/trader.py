@@ -1074,7 +1074,7 @@ PRODUCTS = {
 
     # ROBOT: IRONING/VACUUMING/LAUNDRY all drift below 10,000
     "ROBOT_IRONING":   trend_round5(DirectionalStrategy("ROBOT_IRONING",   10, direction=-1)),  # drift −2170
-    "ROBOT_VACUUMING": DirectionalStrategy("ROBOT_VACUUMING", 10, direction=-1),  # drift −1725
+    "ROBOT_VACUUMING": trend_round5(DirectionalStrategy("ROBOT_VACUUMING", 10, direction=-1)),  # drift −1725
     "ROBOT_LAUNDRY":   EMAMarketMaker("ROBOT_LAUNDRY", 10, ema_alpha=0.005, take_edge=75),  # drift  −746
 
     # TRANSLATOR: SPACE_GRAY/ASTRO_BLACK drift below 10,000
@@ -1106,7 +1106,7 @@ PRODUCTS = {
     "MICROCHIP_SQUARE": DirectionalStrategy("MICROCHIP_SQUARE", 10, direction=+1),  # drift +3633
 
     # OXYGEN_SHAKE
-    "OXYGEN_SHAKE_GARLIC": DirectionalStrategy("OXYGEN_SHAKE_GARLIC", 10, direction=+1),  # drift +3886
+    "OXYGEN_SHAKE_GARLIC": trend_round5(DirectionalStrategy("OXYGEN_SHAKE_GARLIC", 10, direction=+1)),  # drift +3886
 
     # GALAXY_SOUNDS: BLACK_HOLES has the largest upward drift in the family
     "GALAXY_SOUNDS_BLACK_HOLES":  trend_round5(DirectionalStrategy("GALAXY_SOUNDS_BLACK_HOLES",  10, direction=+1)),  # drift +3458
@@ -1126,7 +1126,7 @@ PRODUCTS = {
     "UV_VISOR_MAGENTA": trend_round5(DirectionalStrategy("UV_VISOR_MAGENTA", 10, direction=+1)),  # drift +1532
 
     # ROBOT
-    "ROBOT_MOPPING": DirectionalStrategy("ROBOT_MOPPING", 10, direction=+1),  # drift +1588
+    "ROBOT_MOPPING": trend_round5(DirectionalStrategy("ROBOT_MOPPING", 10, direction=+1)),  # drift +1588
     "ROBOT_DISHES":  trend_round5(DirectionalStrategy("ROBOT_DISHES",  10, direction=+1)),  # drift +1200
 
     # TRANSLATOR
