@@ -8,18 +8,55 @@ R3-R5 results count toward final ranking.
 
 ## ⭐ NEW SESSION? START HERE
 
-For R5 work, read in order:
+**Active submission: `src/trader.py` is v9** (also at
+`docs/round_5/strategy_versions/r5_v9_tuned.py`).
+BT $271,718 across days 2/3/4. Live result tbd.
 
-1. **`docs/round_5/research/AGENT_BRIEF.md`** — the shared R5 charter,
-   triage rubric, lens map, and what every agent must obey.
-2. **`docs/round_5/brief.md`** — official R5 rules, transcribed facts only.
-3. **`docs/round_5/research/`** — observations, BT recon, R4 lessons,
-   discord intel. Numbered docs are research; AGENT_BRIEF is the charter.
+Resume order for R5 algo work:
 
-For R3 / R4 history (only if asked or relevant):
+1. **`docs/round_5/strategy_versions/README.md`** — full v1-v9 history,
+   BT, live, what each version did/learned.
+2. **`docs/round_5/research/inv01-10*.md`** — 10-agent investigation
+   reports (stops, A-S, GARCH, cointegration, book imbalance, walk-fwd,
+   adversarial, PnL decomp, XGBoost, NPC stochasticity).
+3. **`docs/round_5/research/EDA_FINAL_TRIAGE.md`** + `regime_analysis_v7.md`
+   — per-product structural classification.
+
+For R3/R4 history (only if asked):
 - `docs/round_3/JOURNEY.md` — concise R3 retro.
-- `docs/round_4/research/01_friend_bot_deep_inspect.md` — what worked
-  in R4's $197k bot.
+- `docs/round_4/research/01_friend_bot_deep_inspect.md` — R4 friend's $197k bot.
+
+## R5 algo state (2026-04-30)
+
+- **v9 architecture**: 5-regime passive MM on 46 products + PEBBLES
+  basket-coordinator (sum=50000 constraint, soft_cap=10) + SNACKPACK
+  group-skew coordinator (2+2+1 anti-corr) + 3 per-product overrides
+  (MICROCHIP_SQUARE, UV_VISOR_AMBER, PANEL_2X4).
+- **Skipped products (4 consistent BT+live bleeders)**: ROBOT_DISHES,
+  OXYGEN_SHAKE_MINT, MICROCHIP_TRIANGLE, OXYGEN_SHAKE_MORNING_BREATH.
+- **What we proved doesn't work (don't re-explore)**:
+  - Capsule directional drift bets (v5: BT $456k, live $11k — 6/13 reversed)
+  - XGBoost / ML on tick returns (A9: 0 products clear 55% OOS)
+  - New cointegrated pairs beyond SNACKPACK (A4: zero cross-category)
+  - Stop-losses on wide_drifty regime (A1: net-negative)
+  - ROBOT settled-gate (A7: net -$1k/day, no documented upside)
+- **Hard ceiling at limit=10**: only 23% of PnL is real spread capture
+  (A8); rest is inventory-MTM exposure. NPC randomization gives ±$20k
+  variance baseline (A10). Live PnL band is ~$15-30k for robust passive
+  MM regardless of micro-tuning.
+- **Live results so far**: v4 $20.6k, v5 $11.3k, v7 $18.9k, v8 $18.1k.
+- **Friend's algo performs better than ours** (per user, 2026-04-30) —
+  TODO when they share: compare for OOS overfit; their advantage may be
+  capsule-only.
+
+## R5 manual (Ignith / Ashflow Alpha) — NOT STARTED
+
+- 9 Ignith goods, 1-day directional bet, hold to next day.
+- Budget = 1,000,000 Zyrex (separate currency).
+- Fee = `(volume_pct/100)² * budget`. Quadratic penalty on concentration.
+- Underused budget evaporates. Use less than 100% if edge < fee.
+- News source: Ashflow Alpha (discord scraped, content TBD).
+- Brief: `docs/round_5/brief.md`.
 
 ## Critical mechanics (verified)
 
