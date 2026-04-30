@@ -8,9 +8,16 @@ R3-R5 results count toward final ranking.
 
 ## ⭐ NEW SESSION? START HERE
 
-**Active submission: `src/trader.py` is v9** (also at
-`docs/round_5/strategy_versions/r5_v9_tuned.py`).
-BT $271,718 across days 2/3/4. Live result tbd.
+**Active submission: `src/trader.py` is v11** (also at
+`docs/round_5/strategy_versions/r5_v11_no_dir_skip_bleeders.py`).
+BT $743,544 across days 2/3/4 (rising 213k → 233k → 297k). Live tbd.
+
+v11 = port of teammate Ian v25's architecture (EMAMarketMaker +
+selective take_edge + settled/trend gates) with ALL 22
+DirectionalStrategy lines stripped to EMA-MM, then 10 BT-bleeder
+products skipped. Lighter risk management than v9 (no stops, full
+position limit, mild 0.1 inventory skew). Expected live ~$52k,
+matching Ian v25's $52,288 live result.
 
 Resume order for R5 algo work:
 
@@ -28,12 +35,18 @@ For R3/R4 history (only if asked):
 
 ## R5 algo state (2026-04-30)
 
-- **v9 architecture**: 5-regime passive MM on 46 products + PEBBLES
-  basket-coordinator (sum=50000 constraint, soft_cap=10) + SNACKPACK
-  group-skew coordinator (2+2+1 anti-corr) + 3 per-product overrides
-  (MICROCHIP_SQUARE, UV_VISOR_AMBER, PANEL_2X4).
-- **Skipped products (4 consistent BT+live bleeders)**: ROBOT_DISHES,
-  OXYGEN_SHAKE_MINT, MICROCHIP_TRIANGLE, OXYGEN_SHAKE_MORNING_BREATH.
+- **v11 architecture**: 40 products on Ian's EMAMarketMaker core
+  (passive quoting at best_bid+1/best_ask-1, selective takes only at
+  100-200 ticks beyond EMA fair, full position limit 10, 0.1 inventory
+  skew). EntryGate wrappers (`settled_round5`, `trend_round5`) on
+  some products. 10 BT-bleeder products skipped entirely.
+- **Skipped products (10 v11 bleeders)**: MICROCHIP_SQUARE,
+  SLEEP_POD_COTTON, ROBOT_MOPPING, SLEEP_POD_LAMB_WOOL,
+  GALAXY_SOUNDS_BLACK_HOLES, GALAXY_SOUNDS_SOLAR_FLAMES, UV_VISOR_RED,
+  ROBOT_IRONING, PANEL_1X2, OXYGEN_SHAKE_MINT.
+- **v9 (deprecated)** was 5-regime PassiveMM with stops, soft_caps 4-7.
+  Risk management was overboard — voluntarily capped at 40-70% of
+  position limit while Ian uses full 10. Live $18-21k expected.
 - **What we proved doesn't work (don't re-explore)**:
   - Capsule directional drift bets (v5: BT $456k, live $11k — 6/13 reversed)
   - XGBoost / ML on tick returns (A9: 0 products clear 55% OOS)
@@ -44,10 +57,10 @@ For R3/R4 history (only if asked):
   (A8); rest is inventory-MTM exposure. NPC randomization gives ±$20k
   variance baseline (A10). Live PnL band is ~$15-30k for robust passive
   MM regardless of micro-tuning.
-- **Live results so far**: v4 $20.6k, v5 $11.3k, v7 $18.9k, v8 $18.1k.
-- **Friend's algo performs better than ours** (per user, 2026-04-30) —
-  TODO when they share: compare for OOS overfit; their advantage may be
-  capsule-only.
+- **Live results so far**: v4 $20.6k, v5 $11.3k, v7 $18.9k, v8 $18.1k
+  (all our v9-class submissions cap at ~$20k live).
+- **Teammate Ian's live**: v18 $48.3k, v25 $52.3k. v11 ports his
+  architecture; expected to match.
 
 ## R5 manual (Ignith / Ashflow Alpha) — NOT STARTED
 

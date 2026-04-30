@@ -1048,7 +1048,7 @@ PRODUCTS = {
     "GALAXY_SOUNDS_SOLAR_WINDS":      settled_round5(EMAMarketMaker("GALAXY_SOUNDS_SOLAR_WINDS",      10, ema_alpha=0.01, take_edge=200)),
     "MICROCHIP_CIRCLE":               settled_round5(EMAMarketMaker("MICROCHIP_CIRCLE",               10, ema_alpha=0.01, take_edge=10_000)),
     "OXYGEN_SHAKE_CHOCOLATE":         EMAMarketMaker("OXYGEN_SHAKE_CHOCOLATE",         10, ema_alpha=0.01, take_edge=150),
-    # SKIPPED (v10 BT bleeder): "OXYGEN_SHAKE_MINT":              settled_round5(EMAMarketMaker("OXYGEN_SHAKE_MINT",              10, ema_alpha=0.01, take_edge=10_000)),
+    "OXYGEN_SHAKE_MINT":              settled_round5(EMAMarketMaker("OXYGEN_SHAKE_MINT",              10, ema_alpha=0.01, take_edge=10_000)),
     "PEBBLES_M": EMAMarketMaker("PEBBLES_M", 10, ema_alpha=0.003, take_edge=200),
     "SLEEP_POD_NYLON":                EMAMarketMaker("SLEEP_POD_NYLON",                10, ema_alpha=0.005, take_edge=75),
     "TRANSLATOR_ECLIPSE_CHARCOAL":    EMAMarketMaker("TRANSLATOR_ECLIPSE_CHARCOAL",    10, ema_alpha=0.003, take_edge=200),
@@ -1073,7 +1073,7 @@ PRODUCTS = {
     "MICROCHIP_RECTANGLE": EMAMarketMaker("MICROCHIP_RECTANGLE", 10, ema_alpha=0.005, take_edge=150),  # drift −1228
 
     # ROBOT: IRONING/VACUUMING/LAUNDRY all drift below 10,000
-    # SKIPPED (v10 BT bleeder): "ROBOT_IRONING":   EMAMarketMaker("ROBOT_IRONING", 10, ema_alpha=0.005, take_edge=150),  # drift −2170
+    "ROBOT_IRONING":   EMAMarketMaker("ROBOT_IRONING", 10, ema_alpha=0.005, take_edge=150),  # drift −2170
     "ROBOT_VACUUMING": EMAMarketMaker("ROBOT_VACUUMING", 10, ema_alpha=0.005, take_edge=150),  # drift −1725
     "ROBOT_LAUNDRY":   EMAMarketMaker("ROBOT_LAUNDRY", 10, ema_alpha=0.005, take_edge=75),  # drift  −746
 
@@ -1085,7 +1085,7 @@ PRODUCTS = {
     "PANEL_4X4": EMAMarketMaker("PANEL_4X4", 10, ema_alpha=0.01, take_edge=150),  # drift −872
     "PANEL_1X4": settled_round5(EMAMarketMaker("PANEL_1X4", 10, ema_alpha=0.01, take_edge=10_000)),  # drift −772
     "PANEL_2X2": settled_round5(EMAMarketMaker("PANEL_2X2", 10, ema_alpha=0.01, take_edge=100)),  # drift −607
-    # SKIPPED (v10 BT bleeder): "PANEL_1X2": EMAMarketMaker("PANEL_1X2", 10, ema_alpha=0.005, take_edge=150),  # drift −304
+    "PANEL_1X2": EMAMarketMaker("PANEL_1X2", 10, ema_alpha=0.005, take_edge=150),  # drift −304
 
     # OXYGEN_SHAKE: EVENING_BREATH/MORNING_BREATH drift below 10,000
     "OXYGEN_SHAKE_EVENING_BREATH": EMAMarketMaker("OXYGEN_SHAKE_EVENING_BREATH", 10, ema_alpha=0.01, take_edge=10_000),  # drift −580
@@ -1103,14 +1103,14 @@ PRODUCTS = {
     "PEBBLES_XL": EMAMarketMaker("PEBBLES_XL", 10, ema_alpha=0.005, take_edge=150),  # drift +6068
 
     # MICROCHIP
-    # SKIPPED (v10 BT bleeder): "MICROCHIP_SQUARE": EMAMarketMaker("MICROCHIP_SQUARE", 10, ema_alpha=0.005, take_edge=150),  # drift +3633
+    "MICROCHIP_SQUARE": EMAMarketMaker("MICROCHIP_SQUARE", 10, ema_alpha=0.005, take_edge=150),  # drift +3633
 
     # OXYGEN_SHAKE
     "OXYGEN_SHAKE_GARLIC": EMAMarketMaker("OXYGEN_SHAKE_GARLIC", 10, ema_alpha=0.005, take_edge=150),  # drift +3886
 
     # GALAXY_SOUNDS: BLACK_HOLES has the largest upward drift in the family
-    # SKIPPED (v10 BT bleeder): "GALAXY_SOUNDS_BLACK_HOLES":  EMAMarketMaker("GALAXY_SOUNDS_BLACK_HOLES", 10, ema_alpha=0.005, take_edge=150),  # drift +3458
-    # SKIPPED (v10 BT bleeder): "GALAXY_SOUNDS_SOLAR_FLAMES": EMAMarketMaker("GALAXY_SOUNDS_SOLAR_FLAMES", 10, ema_alpha=0.005, take_edge=150),  # drift  +823
+    "GALAXY_SOUNDS_BLACK_HOLES":  EMAMarketMaker("GALAXY_SOUNDS_BLACK_HOLES", 10, ema_alpha=0.005, take_edge=150),  # drift +3458
+    "GALAXY_SOUNDS_SOLAR_FLAMES": EMAMarketMaker("GALAXY_SOUNDS_SOLAR_FLAMES", 10, ema_alpha=0.005, take_edge=150),  # drift  +823
 
     # PANEL
     "PANEL_2X4": EMAMarketMaker("PANEL_2X4", 10, ema_alpha=0.005, take_edge=150),  # drift +2354
@@ -1118,15 +1118,15 @@ PRODUCTS = {
     # SLEEP_POD: POLYESTER/SUEDE/COTTON all drift well above 10,000
     "SLEEP_POD_POLYESTER":  EMAMarketMaker("SLEEP_POD_POLYESTER", 10, ema_alpha=0.005, take_edge=150),  # drift +1970
     "SLEEP_POD_SUEDE":      EMAMarketMaker("SLEEP_POD_SUEDE", 10, ema_alpha=0.005, take_edge=150),  # drift +1800
-    # SKIPPED (v10 BT bleeder): "SLEEP_POD_COTTON":     EMAMarketMaker("SLEEP_POD_COTTON", 10, ema_alpha=0.005, take_edge=150),  # drift +1414
-    # SKIPPED (v10 BT bleeder): "SLEEP_POD_LAMB_WOOL":  EMAMarketMaker("SLEEP_POD_LAMB_WOOL", 10, ema_alpha=0.005, take_edge=150),  # drift  +808
+    "SLEEP_POD_COTTON":     EMAMarketMaker("SLEEP_POD_COTTON", 10, ema_alpha=0.005, take_edge=150),  # drift +1414
+    "SLEEP_POD_LAMB_WOOL":  EMAMarketMaker("SLEEP_POD_LAMB_WOOL", 10, ema_alpha=0.005, take_edge=150),  # drift  +808
 
     # UV_VISOR
-    # SKIPPED (v10 BT bleeder): "UV_VISOR_RED":     EMAMarketMaker("UV_VISOR_RED", 10, ema_alpha=0.005, take_edge=150),  # drift +1722
+    "UV_VISOR_RED":     EMAMarketMaker("UV_VISOR_RED", 10, ema_alpha=0.005, take_edge=150),  # drift +1722
     "UV_VISOR_MAGENTA": EMAMarketMaker("UV_VISOR_MAGENTA", 10, ema_alpha=0.005, take_edge=150),  # drift +1532
 
     # ROBOT
-    # SKIPPED (v10 BT bleeder): "ROBOT_MOPPING": EMAMarketMaker("ROBOT_MOPPING", 10, ema_alpha=0.005, take_edge=150),  # drift +1588
+    "ROBOT_MOPPING": EMAMarketMaker("ROBOT_MOPPING", 10, ema_alpha=0.005, take_edge=150),  # drift +1588
     "ROBOT_DISHES":  EMAMarketMaker("ROBOT_DISHES", 10, ema_alpha=0.005, take_edge=150),  # drift +1200
 
     # TRANSLATOR

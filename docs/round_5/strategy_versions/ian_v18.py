@@ -1041,17 +1041,17 @@ PRODUCTS = {
     # Round 5 — position limit 10 for all products
 
     # Spread capture / market making
-    "SNACKPACK_RASPBERRY":      settled_round5(EMAMarketMaker("SNACKPACK_RASPBERRY",      10, ema_alpha=0.005, take_edge=200)),
+    "SNACKPACK_RASPBERRY":      settled_round5(EMAMarketMaker("SNACKPACK_RASPBERRY",      10, ema_alpha=0.01, take_edge=10_000)),
     "TRANSLATOR_GRAPHITE_MIST": EMAMarketMaker("TRANSLATOR_GRAPHITE_MIST", 10, ema_alpha=0.005, take_edge=200, skew_per_lot=0.5),
-    "GALAXY_SOUNDS_DARK_MATTER":      settled_round5(EMAMarketMaker("GALAXY_SOUNDS_DARK_MATTER",      10, ema_alpha=0.003, take_edge=150)),
+    "GALAXY_SOUNDS_DARK_MATTER":      settled_round5(EMAMarketMaker("GALAXY_SOUNDS_DARK_MATTER",      10, ema_alpha=0.01, take_edge=150)),
     "GALAXY_SOUNDS_PLANETARY_RINGS":  settled_round5(EMAMarketMaker("GALAXY_SOUNDS_PLANETARY_RINGS",  10, ema_alpha=0.01, take_edge=10_000)),
     "GALAXY_SOUNDS_SOLAR_WINDS":      settled_round5(EMAMarketMaker("GALAXY_SOUNDS_SOLAR_WINDS",      10, ema_alpha=0.01, take_edge=200)),
     "MICROCHIP_CIRCLE":               settled_round5(EMAMarketMaker("MICROCHIP_CIRCLE",               10, ema_alpha=0.01, take_edge=10_000)),
     "OXYGEN_SHAKE_CHOCOLATE":         EMAMarketMaker("OXYGEN_SHAKE_CHOCOLATE",         10, ema_alpha=0.01, take_edge=150),
-    # SKIPPED (v10 BT bleeder): "OXYGEN_SHAKE_MINT":              settled_round5(EMAMarketMaker("OXYGEN_SHAKE_MINT",              10, ema_alpha=0.01, take_edge=10_000)),
-    "PEBBLES_M": EMAMarketMaker("PEBBLES_M", 10, ema_alpha=0.003, take_edge=200),
-    "SLEEP_POD_NYLON":                EMAMarketMaker("SLEEP_POD_NYLON",                10, ema_alpha=0.005, take_edge=75),
-    "TRANSLATOR_ECLIPSE_CHARCOAL":    EMAMarketMaker("TRANSLATOR_ECLIPSE_CHARCOAL",    10, ema_alpha=0.003, take_edge=200),
+    "OXYGEN_SHAKE_MINT":              settled_round5(EMAMarketMaker("OXYGEN_SHAKE_MINT",              10, ema_alpha=0.01, take_edge=10_000)),
+    "PEBBLES_M": EMAMarketMaker("PEBBLES_M", 10, ema_alpha=0.01, take_edge=120),
+    "SLEEP_POD_NYLON":                EMAMarketMaker("SLEEP_POD_NYLON",                10, ema_alpha=0.01, take_edge=100),
+    "TRANSLATOR_ECLIPSE_CHARCOAL":    EMAMarketMaker("TRANSLATOR_ECLIPSE_CHARCOAL",    10, ema_alpha=0.01, take_edge=200),
     "UV_VISOR_YELLOW":                EMAMarketMaker("UV_VISOR_YELLOW",                10, ema_alpha=0.01, take_edge=10_000),
 
     # Pair trading — CHOCOLATE/VANILLA cointegrated, sum locked at ~19,941 (σ=76)
@@ -1063,77 +1063,77 @@ PRODUCTS = {
 
     # Short-biased legs, with maker substitutions where execution beat holding
     # PEBBLES: sum locked at 50,000; XS/S/L all drift below 10,000 start
-    "PEBBLES_XS": EMAMarketMaker("PEBBLES_XS", 10, ema_alpha=0.005, take_edge=150),  # drift −3962
-    "PEBBLES_S":  EMAMarketMaker("PEBBLES_S", 10, ema_alpha=0.005, take_edge=150),  # drift −1934
-    "PEBBLES_L":  EMAMarketMaker("PEBBLES_L", 10, ema_alpha=0.003, take_edge=50),  # drift  −874
+    "PEBBLES_XS": DirectionalStrategy("PEBBLES_XS", 10, direction=-1),  # drift −3962
+    "PEBBLES_S":  DirectionalStrategy("PEBBLES_S",  10, direction=-1),  # drift −1934
+    "PEBBLES_L":  EMAMarketMaker("PEBBLES_L", 10, ema_alpha=0.01, take_edge=100),  # drift  −874
 
     # MICROCHIP: OVAL/TRIANGLE/RECTANGLE all drift below 10,000
-    "MICROCHIP_OVAL":      EMAMarketMaker("MICROCHIP_OVAL", 10, ema_alpha=0.005, take_edge=150),  # drift −4481
-    "MICROCHIP_TRIANGLE":  EMAMarketMaker("MICROCHIP_TRIANGLE", 10, ema_alpha=0.005, take_edge=150),  # drift −2058
-    "MICROCHIP_RECTANGLE": EMAMarketMaker("MICROCHIP_RECTANGLE", 10, ema_alpha=0.005, take_edge=150),  # drift −1228
+    "MICROCHIP_OVAL":      DirectionalStrategy("MICROCHIP_OVAL",      10, direction=-1),  # drift −4481
+    "MICROCHIP_TRIANGLE":  DirectionalStrategy("MICROCHIP_TRIANGLE",  10, direction=-1),  # drift −2058
+    "MICROCHIP_RECTANGLE": DirectionalStrategy("MICROCHIP_RECTANGLE", 10, direction=-1),  # drift −1228
 
     # ROBOT: IRONING/VACUUMING/LAUNDRY all drift below 10,000
-    # SKIPPED (v10 BT bleeder): "ROBOT_IRONING":   EMAMarketMaker("ROBOT_IRONING", 10, ema_alpha=0.005, take_edge=150),  # drift −2170
-    "ROBOT_VACUUMING": EMAMarketMaker("ROBOT_VACUUMING", 10, ema_alpha=0.005, take_edge=150),  # drift −1725
-    "ROBOT_LAUNDRY":   EMAMarketMaker("ROBOT_LAUNDRY", 10, ema_alpha=0.005, take_edge=75),  # drift  −746
+    "ROBOT_IRONING":   trend_round5(DirectionalStrategy("ROBOT_IRONING",   10, direction=-1)),  # drift −2170
+    "ROBOT_VACUUMING": DirectionalStrategy("ROBOT_VACUUMING", 10, direction=-1),  # drift −1725
+    "ROBOT_LAUNDRY":   EMAMarketMaker("ROBOT_LAUNDRY", 10, ema_alpha=0.01, take_edge=100),  # drift  −746
 
     # TRANSLATOR: SPACE_GRAY/ASTRO_BLACK drift below 10,000
-    "TRANSLATOR_SPACE_GRAY":  EMAMarketMaker("TRANSLATOR_SPACE_GRAY", 10, ema_alpha=0.005, take_edge=150),  # drift −1571
+    "TRANSLATOR_SPACE_GRAY":  DirectionalStrategy("TRANSLATOR_SPACE_GRAY",  10, direction=-1),  # drift −1571
     "TRANSLATOR_ASTRO_BLACK": EMAMarketMaker("TRANSLATOR_ASTRO_BLACK", 10, ema_alpha=0.01, take_edge=100),  # drift −1036
 
     # PANEL: all except 2X4 drift below 10,000
     "PANEL_4X4": EMAMarketMaker("PANEL_4X4", 10, ema_alpha=0.01, take_edge=150),  # drift −872
     "PANEL_1X4": settled_round5(EMAMarketMaker("PANEL_1X4", 10, ema_alpha=0.01, take_edge=10_000)),  # drift −772
     "PANEL_2X2": settled_round5(EMAMarketMaker("PANEL_2X2", 10, ema_alpha=0.01, take_edge=100)),  # drift −607
-    # SKIPPED (v10 BT bleeder): "PANEL_1X2": EMAMarketMaker("PANEL_1X2", 10, ema_alpha=0.005, take_edge=150),  # drift −304
+    "PANEL_1X2": DirectionalStrategy("PANEL_1X2", 10, direction=-1),  # drift −304
 
     # OXYGEN_SHAKE: EVENING_BREATH/MORNING_BREATH drift below 10,000
     "OXYGEN_SHAKE_EVENING_BREATH": EMAMarketMaker("OXYGEN_SHAKE_EVENING_BREATH", 10, ema_alpha=0.01, take_edge=10_000),  # drift −580
     "OXYGEN_SHAKE_MORNING_BREATH": EMAMarketMaker("OXYGEN_SHAKE_MORNING_BREATH", 10, ema_alpha=0.01, take_edge=10_000),  # drift −450
 
     # SNACKPACK: PISTACHIO drifts below 10,000 (changed from EMAMarketMaker to avoid bad inventory)
-    "SNACKPACK_PISTACHIO": EMAMarketMaker("SNACKPACK_PISTACHIO", 10, ema_alpha=0.005, take_edge=150),  # drift −887
+    "SNACKPACK_PISTACHIO": DirectionalStrategy("SNACKPACK_PISTACHIO", 10, direction=-1),  # drift −887
 
     # UV_VISOR
-    "UV_VISOR_AMBER":  EMAMarketMaker("UV_VISOR_AMBER", 10, ema_alpha=0.005, take_edge=150),  # drift −2870
+    "UV_VISOR_AMBER":  DirectionalStrategy("UV_VISOR_AMBER",  10, direction=-1),  # drift −2870
     "UV_VISOR_ORANGE": EMAMarketMaker("UV_VISOR_ORANGE", 10, ema_alpha=0.01, take_edge=200),  # drift  −660
 
     # Long-biased legs
     # PEBBLES_XL: largest drift in entire round
-    "PEBBLES_XL": EMAMarketMaker("PEBBLES_XL", 10, ema_alpha=0.005, take_edge=150),  # drift +6068
+    "PEBBLES_XL": DirectionalStrategy("PEBBLES_XL", 10, direction=+1),  # drift +6068
 
     # MICROCHIP
-    # SKIPPED (v10 BT bleeder): "MICROCHIP_SQUARE": EMAMarketMaker("MICROCHIP_SQUARE", 10, ema_alpha=0.005, take_edge=150),  # drift +3633
+    "MICROCHIP_SQUARE": trend_round5(DirectionalStrategy("MICROCHIP_SQUARE", 10, direction=+1)),  # drift +3633
 
     # OXYGEN_SHAKE
-    "OXYGEN_SHAKE_GARLIC": EMAMarketMaker("OXYGEN_SHAKE_GARLIC", 10, ema_alpha=0.005, take_edge=150),  # drift +3886
+    "OXYGEN_SHAKE_GARLIC": DirectionalStrategy("OXYGEN_SHAKE_GARLIC", 10, direction=+1),  # drift +3886
 
     # GALAXY_SOUNDS: BLACK_HOLES has the largest upward drift in the family
-    # SKIPPED (v10 BT bleeder): "GALAXY_SOUNDS_BLACK_HOLES":  EMAMarketMaker("GALAXY_SOUNDS_BLACK_HOLES", 10, ema_alpha=0.005, take_edge=150),  # drift +3458
-    # SKIPPED (v10 BT bleeder): "GALAXY_SOUNDS_SOLAR_FLAMES": EMAMarketMaker("GALAXY_SOUNDS_SOLAR_FLAMES", 10, ema_alpha=0.005, take_edge=150),  # drift  +823
+    "GALAXY_SOUNDS_BLACK_HOLES":  trend_round5(DirectionalStrategy("GALAXY_SOUNDS_BLACK_HOLES",  10, direction=+1)),  # drift +3458
+    "GALAXY_SOUNDS_SOLAR_FLAMES": DirectionalStrategy("GALAXY_SOUNDS_SOLAR_FLAMES", 10, direction=+1),  # drift  +823
 
     # PANEL
-    "PANEL_2X4": EMAMarketMaker("PANEL_2X4", 10, ema_alpha=0.005, take_edge=150),  # drift +2354
+    "PANEL_2X4": trend_round5(DirectionalStrategy("PANEL_2X4", 10, direction=+1)),  # drift +2354
 
     # SLEEP_POD: POLYESTER/SUEDE/COTTON all drift well above 10,000
-    "SLEEP_POD_POLYESTER":  EMAMarketMaker("SLEEP_POD_POLYESTER", 10, ema_alpha=0.005, take_edge=150),  # drift +1970
-    "SLEEP_POD_SUEDE":      EMAMarketMaker("SLEEP_POD_SUEDE", 10, ema_alpha=0.005, take_edge=150),  # drift +1800
-    # SKIPPED (v10 BT bleeder): "SLEEP_POD_COTTON":     EMAMarketMaker("SLEEP_POD_COTTON", 10, ema_alpha=0.005, take_edge=150),  # drift +1414
-    # SKIPPED (v10 BT bleeder): "SLEEP_POD_LAMB_WOOL":  EMAMarketMaker("SLEEP_POD_LAMB_WOOL", 10, ema_alpha=0.005, take_edge=150),  # drift  +808
+    "SLEEP_POD_POLYESTER":  trend_round5(DirectionalStrategy("SLEEP_POD_POLYESTER",  10, direction=+1)),  # drift +1970
+    "SLEEP_POD_SUEDE":      DirectionalStrategy("SLEEP_POD_SUEDE",      10, direction=+1),  # drift +1800
+    "SLEEP_POD_COTTON":     DirectionalStrategy("SLEEP_POD_COTTON",     10, direction=+1),  # drift +1414
+    "SLEEP_POD_LAMB_WOOL":  DirectionalStrategy("SLEEP_POD_LAMB_WOOL",  10, direction=+1),  # drift  +808
 
     # UV_VISOR
-    # SKIPPED (v10 BT bleeder): "UV_VISOR_RED":     EMAMarketMaker("UV_VISOR_RED", 10, ema_alpha=0.005, take_edge=150),  # drift +1722
-    "UV_VISOR_MAGENTA": EMAMarketMaker("UV_VISOR_MAGENTA", 10, ema_alpha=0.005, take_edge=150),  # drift +1532
+    "UV_VISOR_RED":     DirectionalStrategy("UV_VISOR_RED",     10, direction=+1),  # drift +1722
+    "UV_VISOR_MAGENTA": trend_round5(DirectionalStrategy("UV_VISOR_MAGENTA", 10, direction=+1)),  # drift +1532
 
     # ROBOT
-    # SKIPPED (v10 BT bleeder): "ROBOT_MOPPING": EMAMarketMaker("ROBOT_MOPPING", 10, ema_alpha=0.005, take_edge=150),  # drift +1588
-    "ROBOT_DISHES":  EMAMarketMaker("ROBOT_DISHES", 10, ema_alpha=0.005, take_edge=150),  # drift +1200
+    "ROBOT_MOPPING": DirectionalStrategy("ROBOT_MOPPING", 10, direction=+1),  # drift +1588
+    "ROBOT_DISHES":  trend_round5(DirectionalStrategy("ROBOT_DISHES",  10, direction=+1)),  # drift +1200
 
     # TRANSLATOR
-    "TRANSLATOR_VOID_BLUE": EMAMarketMaker("TRANSLATOR_VOID_BLUE", 10, ema_alpha=0.005, take_edge=150),  # drift +1564
+    "TRANSLATOR_VOID_BLUE": DirectionalStrategy("TRANSLATOR_VOID_BLUE", 10, direction=+1),  # drift +1564
 
     # SNACKPACK
-    "SNACKPACK_STRAWBERRY": EMAMarketMaker("SNACKPACK_STRAWBERRY", 10, ema_alpha=0.003, take_edge=150),  # drift +902
+    "SNACKPACK_STRAWBERRY": DirectionalStrategy("SNACKPACK_STRAWBERRY", 10, direction=+1),  # drift +902
 
 }
 

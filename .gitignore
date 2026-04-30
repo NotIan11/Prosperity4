@@ -30,3 +30,6 @@ scripts/datamodel.py
 
 # prosperity3bt local backtest outputs
 backtests/
+
+# Backtester output logs (large activities CSV dumps, regenerable)
+bt_runs/
