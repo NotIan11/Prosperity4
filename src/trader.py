@@ -130,6 +130,87 @@ class DirectionalStrategy(Strategy):
         return orders
 
 
+class EntryGateStrategy(Strategy):
+    """Activate a wrapped strategy after market-state confirmation."""
+
+    def __init__(
+        self,
+        strategy: Strategy,
+        mode: str,
+        direction: int = 0,
+        fast_alpha: float = 0.05,
+        slow_alpha: float = 0.005,
+        trend_spreads: float = 1.0,
+        trigger_spreads: float = 2.0,
+        settle_spreads: float = 1.0,
+    ) -> None:
+        super().__init__(strategy.symbol, strategy.position_limit)
+        self.strategy = strategy
+        self.mode = mode
+        self.direction = direction
+        self.fast_alpha = fast_alpha
+        self.slow_alpha = slow_alpha
+        self.trend_spreads = trend_spreads
+        self.trigger_spreads = trigger_spreads
+        self.settle_spreads = settle_spreads
+        self.fast_mid: Optional[float] = None
+        self.slow_mid: Optional[float] = None
+        self.saw_dislocation = False
+        self.active = False
+
+    def save_state(self) -> dict:
+        return {
+            "fast_mid": self.fast_mid,
+            "slow_mid": self.slow_mid,
+            "saw_dislocation": self.saw_dislocation,
+            "active": self.active,
+            "wrapped": self.strategy.save_state(),
+        }
+
+    def load_state(self, data: dict) -> None:
+        self.fast_mid = data.get("fast_mid")
+        self.slow_mid = data.get("slow_mid")
+        self.saw_dislocation = bool(data.get("saw_dislocation", False))
+        self.active = bool(data.get("active", False))
+        wrapped = data.get("wrapped")
+        if isinstance(wrapped, dict):
+            self.strategy.load_state(wrapped)
+        else:
+            self.strategy.load_state(data)
+
+    def run(self, state: TradingState) -> List[Order]:
+        order_depth = state.order_depths.get(self.symbol)
+        if order_depth is None or not order_depth.buy_orders or not order_depth.sell_orders:
+            return []
+
+        best_bid = max(order_depth.buy_orders)
+        best_ask = min(order_depth.sell_orders)
+        mid = (best_bid + best_ask) / 2.0
+        spread = max(best_ask - best_bid, 1.0)
+
+        if self.fast_mid is None or self.slow_mid is None:
+            self.fast_mid = mid
+            self.slow_mid = mid
+        else:
+            self.fast_mid = (1.0 - self.fast_alpha) * self.fast_mid + self.fast_alpha * mid
+            self.slow_mid = (1.0 - self.slow_alpha) * self.slow_mid + self.slow_alpha * mid
+
+        signal = self.fast_mid - self.slow_mid
+        abs_signal = abs(signal)
+        if abs_signal >= self.trigger_spreads * spread:
+            self.saw_dislocation = True
+
+        if not self.active:
+            if self.mode == "trend":
+                self.active = self.direction * signal >= self.trend_spreads * spread
+            elif self.mode == "settled":
+                self.active = self.saw_dislocation and abs_signal <= self.settle_spreads * spread
+
+        if not self.active:
+            return []
+        return self.strategy.run(state)
+
+
 class EMAMarketMaker(Strategy):
     """EMA-anchored market maker: quote inside the spread, skew by inventory,
     take aggressively when price deviates beyond take_edge from fair value."""
@@ -925,21 +1006,52 @@ class VevOptionStrategy(Strategy):
         return orders
 
 
+ROUND5_GATE_FAST_ALPHA = 0.05
+ROUND5_GATE_SLOW_ALPHA = 0.005
+ROUND5_TREND_SPREADS = 1.0
+ROUND5_SETTLE_TRIGGER_SPREADS = 2.0
+ROUND5_SETTLE_SPREADS = 1.0
+
+
+def trend_round5(strategy: DirectionalStrategy) -> EntryGateStrategy:
+    return EntryGateStrategy(
+        strategy,
+        mode="trend",
+        direction=strategy.direction,
+        fast_alpha=ROUND5_GATE_FAST_ALPHA,
+        slow_alpha=ROUND5_GATE_SLOW_ALPHA,
+        trend_spreads=ROUND5_TREND_SPREADS,
+        trigger_spreads=ROUND5_SETTLE_TRIGGER_SPREADS,
+        settle_spreads=ROUND5_SETTLE_SPREADS,
+    )
+
+
+def settled_round5(strategy: Strategy) -> EntryGateStrategy:
+    return EntryGateStrategy(
+        strategy,
+        mode="settled",
+        fast_alpha=ROUND5_GATE_FAST_ALPHA,
+        slow_alpha=ROUND5_GATE_SLOW_ALPHA,
+        trigger_spreads=ROUND5_SETTLE_TRIGGER_SPREADS,
+        settle_spreads=ROUND5_SETTLE_SPREADS,
+    )
+
+
 PRODUCTS = {
     # Round 5 — position limit 10 for all products
 
     # Spread capture / market making
-    "SNACKPACK_RASPBERRY":      EMAMarketMaker("SNACKPACK_RASPBERRY",      10, ema_alpha=0.01, take_edge=10_000),
+    "SNACKPACK_RASPBERRY":      settled_round5(EMAMarketMaker("SNACKPACK_RASPBERRY",      10, ema_alpha=0.005, take_edge=200)),
     "TRANSLATOR_GRAPHITE_MIST": EMAMarketMaker("TRANSLATOR_GRAPHITE_MIST", 10, ema_alpha=0.005, take_edge=200, skew_per_lot=0.5),
-    "GALAXY_SOUNDS_DARK_MATTER":      EMAMarketMaker("GALAXY_SOUNDS_DARK_MATTER",      10, ema_alpha=0.01, take_edge=150),
-    "GALAXY_SOUNDS_PLANETARY_RINGS":  EMAMarketMaker("GALAXY_SOUNDS_PLANETARY_RINGS",  10, ema_alpha=0.01, take_edge=10_000),
-    "GALAXY_SOUNDS_SOLAR_WINDS":      EMAMarketMaker("GALAXY_SOUNDS_SOLAR_WINDS",      10, ema_alpha=0.01, take_edge=200),
-    "MICROCHIP_CIRCLE":               EMAMarketMaker("MICROCHIP_CIRCLE",               10, ema_alpha=0.01, take_edge=10_000),
+    "GALAXY_SOUNDS_DARK_MATTER":      settled_round5(EMAMarketMaker("GALAXY_SOUNDS_DARK_MATTER",      10, ema_alpha=0.003, take_edge=150)),
+    "GALAXY_SOUNDS_PLANETARY_RINGS":  settled_round5(EMAMarketMaker("GALAXY_SOUNDS_PLANETARY_RINGS",  10, ema_alpha=0.01, take_edge=10_000)),
+    "GALAXY_SOUNDS_SOLAR_WINDS":      settled_round5(EMAMarketMaker("GALAXY_SOUNDS_SOLAR_WINDS",      10, ema_alpha=0.01, take_edge=200)),
+    "MICROCHIP_CIRCLE":               settled_round5(EMAMarketMaker("MICROCHIP_CIRCLE",               10, ema_alpha=0.01, take_edge=10_000)),
     "OXYGEN_SHAKE_CHOCOLATE":         EMAMarketMaker("OXYGEN_SHAKE_CHOCOLATE",         10, ema_alpha=0.01, take_edge=150),
-    "OXYGEN_SHAKE_MINT":              EMAMarketMaker("OXYGEN_SHAKE_MINT",              10, ema_alpha=0.01, take_edge=10_000),
-    "PEBBLES_M":                      EMAMarketMaker("PEBBLES_M",                      10, ema_alpha=0.01, take_edge=120),
-    "SLEEP_POD_NYLON":                EMAMarketMaker("SLEEP_POD_NYLON",                10, ema_alpha=0.01, take_edge=100),
-    "TRANSLATOR_ECLIPSE_CHARCOAL":    EMAMarketMaker("TRANSLATOR_ECLIPSE_CHARCOAL",    10, ema_alpha=0.01, take_edge=200),
+    "OXYGEN_SHAKE_MINT":              settled_round5(EMAMarketMaker("OXYGEN_SHAKE_MINT",              10, ema_alpha=0.01, take_edge=10_000)),
+    "PEBBLES_M": EMAMarketMaker("PEBBLES_M", 10, ema_alpha=0.003, take_edge=200),
+    "SLEEP_POD_NYLON":                EMAMarketMaker("SLEEP_POD_NYLON",                10, ema_alpha=0.005, take_edge=75),
+    "TRANSLATOR_ECLIPSE_CHARCOAL":    EMAMarketMaker("TRANSLATOR_ECLIPSE_CHARCOAL",    10, ema_alpha=0.003, take_edge=200),
     "UV_VISOR_YELLOW":                EMAMarketMaker("UV_VISOR_YELLOW",                10, ema_alpha=0.01, take_edge=10_000),
 
     # Pair trading — CHOCOLATE/VANILLA cointegrated, sum locked at ~19,941 (σ=76)
@@ -953,17 +1065,17 @@ PRODUCTS = {
     # PEBBLES: sum locked at 50,000; XS/S/L all drift below 10,000 start
     "PEBBLES_XS": DirectionalStrategy("PEBBLES_XS", 10, direction=-1),  # drift −3962
     "PEBBLES_S":  DirectionalStrategy("PEBBLES_S",  10, direction=-1),  # drift −1934
-    "PEBBLES_L":  EMAMarketMaker("PEBBLES_L", 10, ema_alpha=0.01, take_edge=100),  # drift  −874
+    "PEBBLES_L":  EMAMarketMaker("PEBBLES_L", 10, ema_alpha=0.003, take_edge=50),  # drift  −874
 
     # MICROCHIP: OVAL/TRIANGLE/RECTANGLE all drift below 10,000
     "MICROCHIP_OVAL":      DirectionalStrategy("MICROCHIP_OVAL",      10, direction=-1),  # drift −4481
     "MICROCHIP_TRIANGLE":  DirectionalStrategy("MICROCHIP_TRIANGLE",  10, direction=-1),  # drift −2058
-    "MICROCHIP_RECTANGLE": DirectionalStrategy("MICROCHIP_RECTANGLE", 10, direction=-1),  # drift −1228
+    "MICROCHIP_RECTANGLE": EMAMarketMaker("MICROCHIP_RECTANGLE", 10, ema_alpha=0.005, take_edge=150),  # drift −1228
 
     # ROBOT: IRONING/VACUUMING/LAUNDRY all drift below 10,000
-    "ROBOT_IRONING":   DirectionalStrategy("ROBOT_IRONING",   10, direction=-1),  # drift −2170
+    "ROBOT_IRONING":   trend_round5(DirectionalStrategy("ROBOT_IRONING",   10, direction=-1)),  # drift −2170
     "ROBOT_VACUUMING": DirectionalStrategy("ROBOT_VACUUMING", 10, direction=-1),  # drift −1725
-    "ROBOT_LAUNDRY":   EMAMarketMaker("ROBOT_LAUNDRY", 10, ema_alpha=0.01, take_edge=100),  # drift  −746
+    "ROBOT_LAUNDRY":   EMAMarketMaker("ROBOT_LAUNDRY", 10, ema_alpha=0.005, take_edge=75),  # drift  −746
 
     # TRANSLATOR: SPACE_GRAY/ASTRO_BLACK drift below 10,000
     "TRANSLATOR_SPACE_GRAY":  DirectionalStrategy("TRANSLATOR_SPACE_GRAY",  10, direction=-1),  # drift −1571
@@ -971,8 +1083,8 @@ PRODUCTS = {
 
     # PANEL: all except 2X4 drift below 10,000
     "PANEL_4X4": EMAMarketMaker("PANEL_4X4", 10, ema_alpha=0.01, take_edge=150),  # drift −872
-    "PANEL_1X4": EMAMarketMaker("PANEL_1X4", 10, ema_alpha=0.01, take_edge=10_000),  # drift −772
-    "PANEL_2X2": EMAMarketMaker("PANEL_2X2", 10, ema_alpha=0.01, take_edge=100),  # drift −607
+    "PANEL_1X4": settled_round5(EMAMarketMaker("PANEL_1X4", 10, ema_alpha=0.01, take_edge=10_000)),  # drift −772
+    "PANEL_2X2": settled_round5(EMAMarketMaker("PANEL_2X2", 10, ema_alpha=0.01, take_edge=100)),  # drift −607
     "PANEL_1X2": DirectionalStrategy("PANEL_1X2", 10, direction=-1),  # drift −304
 
     # OXYGEN_SHAKE: EVENING_BREATH/MORNING_BREATH drift below 10,000
@@ -997,30 +1109,31 @@ PRODUCTS = {
     "OXYGEN_SHAKE_GARLIC": DirectionalStrategy("OXYGEN_SHAKE_GARLIC", 10, direction=+1),  # drift +3886
 
     # GALAXY_SOUNDS: BLACK_HOLES has the largest upward drift in the family
-    "GALAXY_SOUNDS_BLACK_HOLES": DirectionalStrategy("GALAXY_SOUNDS_BLACK_HOLES", 10, direction=+1),  # drift +3458
+    "GALAXY_SOUNDS_BLACK_HOLES":  trend_round5(DirectionalStrategy("GALAXY_SOUNDS_BLACK_HOLES",  10, direction=+1)),  # drift +3458
+    "GALAXY_SOUNDS_SOLAR_FLAMES": DirectionalStrategy("GALAXY_SOUNDS_SOLAR_FLAMES", 10, direction=+1),  # drift  +823
 
     # PANEL
-    "PANEL_2X4": DirectionalStrategy("PANEL_2X4", 10, direction=+1),  # drift +2354
+    "PANEL_2X4": trend_round5(DirectionalStrategy("PANEL_2X4", 10, direction=+1)),  # drift +2354
 
     # SLEEP_POD: POLYESTER/SUEDE/COTTON all drift well above 10,000
-    "SLEEP_POD_POLYESTER":  DirectionalStrategy("SLEEP_POD_POLYESTER",  10, direction=+1),  # drift +1970
+    "SLEEP_POD_POLYESTER":  trend_round5(DirectionalStrategy("SLEEP_POD_POLYESTER",  10, direction=+1)),  # drift +1970
     "SLEEP_POD_SUEDE":      DirectionalStrategy("SLEEP_POD_SUEDE",      10, direction=+1),  # drift +1800
     "SLEEP_POD_COTTON":     DirectionalStrategy("SLEEP_POD_COTTON",     10, direction=+1),  # drift +1414
     "SLEEP_POD_LAMB_WOOL":  DirectionalStrategy("SLEEP_POD_LAMB_WOOL",  10, direction=+1),  # drift  +808
 
     # UV_VISOR
     "UV_VISOR_RED":     DirectionalStrategy("UV_VISOR_RED",     10, direction=+1),  # drift +1722
-    "UV_VISOR_MAGENTA": DirectionalStrategy("UV_VISOR_MAGENTA", 10, direction=+1),  # drift +1532
+    "UV_VISOR_MAGENTA": trend_round5(DirectionalStrategy("UV_VISOR_MAGENTA", 10, direction=+1)),  # drift +1532
 
     # ROBOT
     "ROBOT_MOPPING": DirectionalStrategy("ROBOT_MOPPING", 10, direction=+1),  # drift +1588
-    "ROBOT_DISHES":  DirectionalStrategy("ROBOT_DISHES",  10, direction=+1),  # drift +1200
+    "ROBOT_DISHES":  trend_round5(DirectionalStrategy("ROBOT_DISHES",  10, direction=+1)),  # drift +1200
 
     # TRANSLATOR
     "TRANSLATOR_VOID_BLUE": DirectionalStrategy("TRANSLATOR_VOID_BLUE", 10, direction=+1),  # drift +1564
 
     # SNACKPACK
-    "SNACKPACK_STRAWBERRY": DirectionalStrategy("SNACKPACK_STRAWBERRY", 10, direction=+1),  # drift +902
+    "SNACKPACK_STRAWBERRY": EMAMarketMaker("SNACKPACK_STRAWBERRY", 10, ema_alpha=0.003, take_edge=150),  # drift +902
 
 }
 
