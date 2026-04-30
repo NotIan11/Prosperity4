@@ -14,10 +14,16 @@ $1,103,278 (per-day 469/309/326) — highest capsule of all candidates.
 
 v15 = Ian v25 architecture + ALL 25 directionals trend-gated +
 1000-tick stops ONLY on PEBBLES_XL and MICROCHIP_SQUARE (the 2
-products with documented capsule full-day reversals > 1000 ticks).
-Other 23 directionals lose the universal stop because codex's
-analysis showed it cost edge on a broad set of products without
-reversal evidence.
+products with documented capsule full-day reversals > 1000 ticks
+against bet direction). Other 23 directionals lose stops because
+codex's analysis showed universal 1000-tick stops cost edge on 8
+products where intraday volatility crosses 1000 ticks but daily drift
+recovers.
+
+v16 (rejected) tried adding a 2500-tick "catastrophic-only" layer on
+the other 23 — but the 2500 threshold was chosen precisely because no
+capsule day exceeded it, which is parameter-fitting to the data
+(overfit). Skipped.
 
 Why surgical not universal: codex independently backtested 1000-tick
 universal stops vs no-stop baseline across full R5, first-100k slice,
