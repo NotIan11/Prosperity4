@@ -8,15 +8,24 @@ R3-R5 results count toward final ranking.
 
 ## ⭐ NEW SESSION? START HERE
 
-**Active submission: `src/trader.py` is v13 = teammate Ian v16
-unchanged** (also at `docs/round_5/strategy_versions/r5_v13_ian_v16_unchanged.py`).
-BT $1,010,444. Ian's same code lived at $62,618 — known result.
+**Active submission: `src/trader.py` is v14** (Ian v25 architecture +
+all 25 directionals trend-gated + 1000-tick adverse stop-loss on every
+directional). BT $1,097,228 (per-day 469/306/322). Stops fire on
+catastrophic reversals only (saved $13k on MICROCHIP_SQUARE alone in
+capsule day 4 where drift reversed −2,278); cost ~$6k from
+false-positive exits on noise. Net +$14k vs ungated v12.
 
-Live history this iteration: v11 (no directionals) $15k, v12 (v25 with
-gated directionals) $49k, Ian v16 $62.6k, Ian v25 $52.3k. Directionals
-ARE genuine alpha; my v11 strip was the mistake. Ian v25's "improvements"
-over v16 (slower EMAs, demoted directionals, activated RASPBERRY)
-overtuned and cost ~$10k live. v16 is the proven template.
+Why stops matter for scoring: R3 day-3 reversal showed scoring days
+can flip capsule drifts. Without stops, hardcoded `direction=±1` bets
+ride into max position and bleed to EOD on reversed days. 1000-tick
+threshold catches catastrophic reversals (R3 day-3 style) without
+firing on normal intraday drawdowns.
+
+Live history this iteration: v11 (no directionals) $15k, v12 (gated)
+$49k, Ian v16 $62.6k, Ian v25 $52.3k — all measured on day-4 portal
+preview, NOT scoring. Scoring runs on hidden day 5 with full 10k
+ticks. R3 history (day 3 reversed days 0-2 drifts) is the closest
+analog and motivates v14's stops.
 
 Resume order for R5 algo work:
 
