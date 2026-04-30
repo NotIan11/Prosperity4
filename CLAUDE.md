@@ -8,24 +8,28 @@ R3-R5 results count toward final ranking.
 
 ## ⭐ NEW SESSION? START HERE
 
-**Active submission: `src/trader.py` is v14** (Ian v25 architecture +
-all 25 directionals trend-gated + 1000-tick adverse stop-loss on every
-directional). BT $1,097,228 (per-day 469/306/322). Stops fire on
-catastrophic reversals only (saved $13k on MICROCHIP_SQUARE alone in
-capsule day 4 where drift reversed −2,278); cost ~$6k from
-false-positive exits on noise. Net +$14k vs ungated v12.
+**Active submission: `src/trader.py` is v14**. Three candidates under
+review (3 parallel review agents argue each):
+- **A. Ian v25** (`docs/round_5/strategy_versions/ian_v25.py`) — BT $1,099k, live $52.3k
+- **B. Aadi v1** (`docs/round_5/strategy_versions/aadi_v1.py`) — BT $1,058k, live $52.5k
+- **C. v14** (`docs/round_5/strategy_versions/r5_v14_directional_stops.py`) — BT $1,097k, live $49.3k
 
-Why stops matter for scoring: R3 day-3 reversal showed scoring days
-can flip capsule drifts. Without stops, hardcoded `direction=±1` bets
-ride into max position and bleed to EOD on reversed days. 1000-tick
-threshold catches catastrophic reversals (R3 day-3 style) without
-firing on normal intraday drawdowns.
+All three share Ian's EMAMarketMaker core + ~25 hardcoded directional
+bets fit to capsule cumulative drifts. Differences in risk management:
+- v25: subset trend-gated, no stops
+- aadi: full v25 + 5 weak-drift bets scaled down to cap=5-7 (instead of 10)
+- v14: full v25 + ALL 25 directionals trend-gated + 1000-tick stop-loss
+  on every directional (exits + sits flat for the day on adverse move)
+
+v14 has best Sharpe (4.55 vs 4.32) and tightest min-tick PnL (-$3,449
+vs -$4,275). Briefing for review at:
+`docs/round_5/strategy_versions/SHIP_DECISION_BRIEFING.md`
 
 Live history this iteration: v11 (no directionals) $15k, v12 (gated)
-$49k, Ian v16 $62.6k, Ian v25 $52.3k — all measured on day-4 portal
-preview, NOT scoring. Scoring runs on hidden day 5 with full 10k
-ticks. R3 history (day 3 reversed days 0-2 drifts) is the closest
-analog and motivates v14's stops.
+$49k, Ian v16 $62.6k, Ian v25 $52.3k, Aadi v1 $52.5k, v14 $49.3k —
+all measured on day-4 portal preview (1k ticks of capsule), NOT
+scoring. Scoring runs on hidden day 5 with full 10k ticks. R3 history
+(day 3 reversed days 0-2 drifts) is the closest analog.
 
 Resume order for R5 algo work:
 

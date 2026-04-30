@@ -1,113 +1,142 @@
 # R5 Manual — Allocation v1
 
-## Mechanics (from `docs/round_5/brief.md`)
+## Final recommendation: **Plan B (Middle path)**
 
-- Budget: **1,000,000 Zyrex**.
-- Fee per good: `(v_i / 100)² × 1,000,000 = 100·v_i²` (quadratic in % allocation).
-- Constraint: `Σ |v_i| ≤ 100`. May go under; may NOT exceed.
-- Used budget is subtracted from PnL; unused budget expires worthless.
+| # | Good | Action | % |
+|---|---|---|---|
+| 1 | Obsidian cutlery | Buy | 2 |
+| 2 | Pyroflex cells | Sell | 17 |
+| 3 | Thermalite core | Buy | 18 |
+| 4 | Lava cake | Sell | 14 |
+| 5 | Magma ink | Buy | 10 |
+| 6 | Scoria paste | — | **0** |
+| 7 | Ashes of the Phoenix | Sell | 4 |
+| 8 | Volcanic incense | — | **0** |
+| 9 | Sulfur reactor | Buy | 20 |
+
+**Total: 85% · Fee: 131,700 · Expected PnL: +132,900**
+
+### Cells to update from current portal state
+
+```
+Lava cake:        Sell 12 → Sell 14
+Magma ink:        Buy  13 → Buy  10
+Scoria paste:     Buy   6 → 0      (skip — likely trap)
+Volcanic incense: Buy   9 → 0      (skip — likely trap)
+Sulfur reactor:   Buy  19 → Buy  20
+```
+
+---
+
+## Mechanics (verified from `docs/round_5/brief.md` + portal screenshot)
+
+- Budget: 1,000,000 Zyrex.
+- Fee per good: `100·v²` (quadratic in % allocation). Confirmed exact on portal.
+- Constraint: `Σ |v_i| ≤ 100`. Under is allowed; over isn't.
+- BUY/SELL allowed per good (portal has dropdown).
+- Used budget subtracted from PnL; unused expires worthless.
 - 9 Ignith goods, 1-day hold, no re-trading.
 
-## Per-good PnL math
-
-Let `v_i` = % budget allocated, `r_i` = expected 1-day return on the position
-(positive = direction matches paper signal).
+## PnL math
 
 ```
-Capital_i = v_i × 10,000
-Fee_i     = 100 × v_i²
-Gross_i   = |r_i| × v_i × 10,000
-Net_i     = 10,000·|r_i|·v_i  −  100·v_i²
+Per good i:
+  Capital = v_i × 10,000
+  Fee     = 100 × v_i²
+  Gross   = (sign-correct?) × |r_i| × v_i × 10,000
+  Net     = (2p_i − 1)·|r_i|·v_i·10,000  −  100·v_i²
 ```
 
-Unconstrained per-good optimum: `v_i* = 50·|r_i|`, giving `Net_i* = 250,000·r_i²`.
+where `p_i` = probability the paper's direction is correct.
 
-If `Σ 50·|r_i| > 100`, budget cap binds and Lagrangian rescales:
-`v_i = 50·r_i − λ/200` (uniform shrink across goods).
+Unconstrained optimum: `v* = 50·|r_i|·(2p_i − 1)`. Net at optimum = `(2p−1)²·250,000·r²`.
+At `p=1.0`: half of gross is fee. At `p=0.5`: skip is optimal.
 
-## What the source materials give us
+## What we don't know — by design
 
-**The newspaper does NOT publish return forecasts.** Only direction + qualitative
-strength. Hard numbers in the paper are fundamentals, not returns:
+- Actual `r_i` values are NOT in the newspaper. Paper gives signal direction +
+  qualitative strength only. Hard numbers (Pyroflex cost doubles, Thermalite
+  user-base 2.7×) are fundamentals, not stock returns.
+- IMC anchors per-good return ranges; crowd submissions tilt mildly inside.
+- Traps vs real signals on Volcanic + Scoria is a meta-judgement, unprovable
+  from materials.
 
-| Article | Quantitative anchor |
-|---|---|
-| Article 3 (Pyroflex) | "doubles the current levy" — input cost shock |
-| Article 4 (Thermalite) | Users 1.42M → 3.89M (+174%); 16h 42min/day usage |
-| Article 1 (Magma Ink) | "more than six hours" queue (anecdotal) |
-| Articles 2, 5, 6, 7, 8, 9 | None |
+All `r` values below are **friend's calibration** (assumed by reverse-engineering
+their allocation through `v* = 50r`). We use these as our best estimate.
 
-Discord-confirmed mechanic: IMC sets a pre-anchored return range per good;
-crowd submissions tilt mildly within range. **Players cannot read the actual r.**
-All r below are assumed by either us or our teammate.
+## Three plans considered
 
-## Plan A — Friend's allocation (full 100% budget)
+### Plan A — Friend's full (100% deployed)
 
-| Good | Action | v% | Implied \|r\| | Capital | Fee | Net (if r holds) |
-|---|---|---|---|---|---|---|
-| Sulfur Reactor | BUY | 20 | 0.40 | 200,000 | 40,000 | +40,000 |
-| Thermalite Core | BUY | 18 | 0.36 | 180,000 | 32,400 | +32,400 |
-| Pyroflex Cells | SELL | 17 | 0.34 | 170,000 | 28,900 | +28,900 |
-| Lava Cake | SELL | 14 | 0.28 | 140,000 | 19,600 | +19,600 |
-| Magma Ink | BUY | 10 | 0.20 | 100,000 | 10,000 | +10,000 |
-| Volcanic Incense | BUY | 8 | 0.16 | 80,000 | 6,400 | +6,400 |
-| Scoria Paste | BUY | 7 | 0.14 | 70,000 | 4,900 | +4,900 |
-| Ashes of Phoenix | SELL | 4 | 0.08 | 40,000 | 1,600 | +1,600 |
-| Obsidian Cutlery | BUY | 2 | 0.04 | 20,000 | 400 | +400 |
-| **Totals** | | **100%** | | 1,000,000 | 144,200 | **+144,200** |
+| Good | Action | v% | Implied \|r\| | Fee | Net (paper-honest) |
+|---|---|---|---|---|---|
+| Sulfur Reactor | Buy | 20 | 0.40 | 40,000 | +40,000 |
+| Thermalite Core | Buy | 18 | 0.36 | 32,400 | +32,400 |
+| Pyroflex Cells | Sell | 17 | 0.34 | 28,900 | +28,900 |
+| Lava Cake | Sell | 14 | 0.28 | 19,600 | +19,600 |
+| Magma Ink | Buy | 10 | 0.20 | 10,000 | +10,000 |
+| Volcanic Incense | Buy | 8 | 0.16 | 6,400 | +6,400 |
+| Scoria Paste | Buy | 7 | 0.14 | 4,900 | +4,900 |
+| Ashes of Phoenix | Sell | 4 | 0.08 | 1,600 | +1,600 |
+| Obsidian Cutlery | Buy | 2 | 0.04 | 400 | +400 |
+| **Totals** | | **100** | | **144,200** | **+144,200** |
 
-Reads paper at face value. Internally consistent: ratios match `v ∝ r`,
-implying friend's strategy is "trust the paper, scale to budget cap."
+### Plan B — Middle (skip Volcanic + Scoria) ⭐
 
-## Plan B — Discord-inverted variant (fade the pumps)
+Same as A except V/S set to 0. **Total 85% deployed, fee 131,700, net +132,900.**
 
-Identical to Plan A except Volcanic Incense and Scoria Paste flipped from BUY to
-SELL — discord consensus reads both influencer-driven articles as designed traps.
+### Plan C — Inverted (flip V+S to Sell)
 
-| Good | Action | v% | Net (if signed r holds) |
+Same as A except V Sell 8 / S Sell 7. Total 100%, fee 144,200, net +99,000 if
+paper honest, +143,200 if traps.
+
+## Scenario matrix — total PnL
+
+| Plan | Paper honest | Pumps are traps |
+|---|---|---|
+| A (full) | **144,200** | 99,000 |
+| **B (middle)** | 132,900 | 132,900 |
+| C (inverted) | 99,000 | **143,200** |
+
+## Regret matrix — vs the best plan in each scenario
+
+| Plan | If honest | If trap | Worst-case |
 |---|---|---|---|
-| Sulfur Reactor | BUY | 20 | +40,000 |
-| Thermalite Core | BUY | 18 | +32,400 |
-| Pyroflex Cells | SELL | 17 | +28,900 |
-| Lava Cake | SELL | 14 | +19,600 |
-| Magma Ink | BUY | 10 | +10,000 |
-| Volcanic Incense | **SELL** | 8 | +6,400 (if pump fades) / −19,200 (if pump real) |
-| Scoria Paste | **SELL** | 7 | +4,900 (if pump fades) / −14,700 (if pump real) |
-| Ashes of Phoenix | SELL | 4 | +1,600 |
-| Obsidian Cutlery | BUY | 2 | +400 |
+| A (full) | 0 | −45,200 | **−45,200** |
+| **B (middle)** | **−11,300** | **−11,300** | **−11,300** |
+| C (inverted) | −45,200 | 0 | −45,200 |
 
-Same fee structure (144,200). PnL diverges only on the two flipped goods.
+## EV-vs-median competitor (assumed = Plan A)
 
-## Plan C — Conservative 65% (original)
+| Plan | If honest | If trap | EV at p(trap) = 0.55 |
+|---|---|---|---|
+| A (full) | 0 | 0 | 0 (no leaderboard climb) |
+| **B (middle)** | −11,300 | **+33,900** | **+13,560** |
+| C (inverted) | −45,200 | +45,200 | +4,520 |
 
-Skips Magma Ink + Obsidian Cutlery (split community / priced-in concerns),
-small SHORTS on Volcanic + Scoria + Ashes. Total deployed 65%, expected
-net ≈ +80,000 if assumed |r|s hold. Lower variance, lower upside.
+## Why Plan B
 
-## Decision criteria
+1. **Smallest worst-case regret** (−11,300 vs −45,200 for A or C).
+2. **Highest EV-vs-median** across realistic `p(trap) ∈ [0.40, 0.70]`.
+3. **Big-4 (where ~91% of PnL lives) is unchanged.** Sizing on
+   Sulfur/Thermalite/Pyroflex/Lava is friend's, which we agree on.
+4. **Skip is mathematically dominant** for goods where direction confidence
+   is in [0.25, 0.75] — exactly where Volcanic + Scoria sit per discord and
+   paper meta-cues. Threshold derivation: at `v* = 50r`, hold beats skip iff
+   `p > 0.75`; flip beats skip iff `p < 0.25`.
 
-- If **|r| averages ≥ 0.30** across the 4 high-confidence goods → Plan A optimal
-  (full budget pays off).
-- If **|r| averages ~0.20** → Plan C optimal (65% is closer to the unconstrained
-  per-good optimum; Plan A overpays in fees).
-- If **the influencer articles are traps (game design)** → flip Volcanic + Scoria
-  → Plan B beats Plan A by ~25,600 expected (8%/7% switching from buy-into-fade
-  to short-into-fade).
+## When NOT to pick Plan B
 
-## Open questions before submission
-
-1. **Are shorts allowed?** Brief says "distribute budget across goods" — implies
-   long-only. If long-only, all SELL rows above become "skip", which hurts our
-   expected PnL on Pyroflex / Lava / Ashes a lot. **MUST verify on portal UI.**
-2. **Is the fee deducted from the deployed capital or from final PnL?** Brief
-   says "used budget is subtracted from trade PnL" — net formula handles both
-   identically, but worth confirming.
-3. Does Volcanic Incense / Scoria Paste pumping continue (face-value buy) or
-   reverse (trap)? Unresolvable from paper alone.
+- Pick A if you have strong conviction the paper is fully honest (e.g., other
+  signals or insider info we don't have).
+- Pick C if you have strong conviction `p(trap) ≥ 0.65` on Volcanic + Scoria
+  and want maximum leaderboard climb at higher variance.
 
 ## Sources
 
 - Newspaper: `docs/round_5/manual/ashflow_alpha_transcript.md`
 - Discord: `docs/round_5/manual/discord_findings.md`
 - Brief: `docs/round_5/brief.md`
-- Friend's screenshot: pasted by user 2026-04-30 (recommended Plan A).
+- Friend's allocation screenshot: pasted by user 2026-04-30.
+- Portal state screenshot: pasted by user 2026-04-30 (BUY/SELL confirmed,
+  fee formula verified, current state = friend's pre-revised values).
