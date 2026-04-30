@@ -8,28 +8,43 @@ R3-R5 results count toward final ranking.
 
 ## ⭐ NEW SESSION? START HERE
 
-**Active submission: `src/trader.py` is v14**. Three candidates under
-review (3 parallel review agents argue each):
-- **A. Ian v25** (`docs/round_5/strategy_versions/ian_v25.py`) — BT $1,099k, live $52.3k
-- **B. Aadi v1** (`docs/round_5/strategy_versions/aadi_v1.py`) — BT $1,058k, live $52.5k
-- **C. v14** (`docs/round_5/strategy_versions/r5_v14_directional_stops.py`) — BT $1,097k, live $49.3k
+**Active submission: `src/trader.py` is v15**
+(`docs/round_5/strategy_versions/r5_v15_surgical_stops.py`). BT
+$1,103,278 (per-day 469/309/326) — highest capsule of all candidates.
 
-All three share Ian's EMAMarketMaker core + ~25 hardcoded directional
-bets fit to capsule cumulative drifts. Differences in risk management:
-- v25: subset trend-gated, no stops
-- aadi: full v25 + 5 weak-drift bets scaled down to cap=5-7 (instead of 10)
-- v14: full v25 + ALL 25 directionals trend-gated + 1000-tick stop-loss
-  on every directional (exits + sits flat for the day on adverse move)
+v15 = Ian v25 architecture + ALL 25 directionals trend-gated +
+1000-tick stops ONLY on PEBBLES_XL and MICROCHIP_SQUARE (the 2
+products with documented capsule full-day reversals > 1000 ticks).
+Other 23 directionals lose the universal stop because codex's
+analysis showed it cost edge on a broad set of products without
+reversal evidence.
 
-v14 has best Sharpe (4.55 vs 4.32) and tightest min-tick PnL (-$3,449
-vs -$4,275). Briefing for review at:
-`docs/round_5/strategy_versions/SHIP_DECISION_BRIEFING.md`
+Why surgical not universal: codex independently backtested 1000-tick
+universal stops vs no-stop baseline across full R5, first-100k slice,
+and a live replay window. Universal stops were net -$2k full-R5,
+-$16k first-100k, -$3k live. Win was concentrated in MICROCHIP_SQUARE
+day-4. Cost was distributed across 8 products (GALAXY_SOLAR_FLAMES,
+SLEEP_POD_COTTON, PANEL_1X2, PEBBLES_XS, UV_VISOR_AMBER, UV_VISOR_RED,
+TRANSLATOR_SPACE_GRAY, TRANSLATOR_VOID_BLUE) where 1000 ticks fires on
+intraday noise but daily drift recovers. v15 drops stops from those 23.
 
-Live history this iteration: v11 (no directionals) $15k, v12 (gated)
-$49k, Ian v16 $62.6k, Ian v25 $52.3k, Aadi v1 $52.5k, v14 $49.3k —
-all measured on day-4 portal preview (1k ticks of capsule), NOT
-scoring. Scoring runs on hidden day 5 with full 10k ticks. R3 history
-(day 3 reversed days 0-2 drifts) is the closest analog.
+Candidate ladder (BT capsule):
+- v15 (current): $1,103k — surgical stops on 2 products
+- Ian v25:       $1,099k — no stops
+- v14:           $1,097k — universal stops on all 25
+- Aadi v1:       $1,058k — Ian v25 + 5 weak bets scaled to cap=5-7
+
+Live history (day-4 portal preview, 1k ticks):
+- v11 (no directionals): $15k
+- v14 (universal stops): $49.3k
+- v12 (universal gates, no stops): $49.3k
+- Ian v25: $52.3k
+- Aadi v1: $52.5k
+- Ian v16 (mostly bare directionals): $62.6k
+- v15: tbd
+
+Scoring runs on hidden day 5 with full 10k ticks (same convention as
+R3: capsule = days 0-2, scoring = day 3, full-day, hidden-then-extracted).
 
 Resume order for R5 algo work:
 
