@@ -1,0 +1,12 @@
+.venv/
+__pycache__/
+*.pyc
+*.pyo
+.DS_Store
+backtests/*.log
+backtests/*.json
+*.egg-info/
+dist/
+build/
+.ipynb_checkpoints/
+*.zip
